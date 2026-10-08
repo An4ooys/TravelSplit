@@ -7,10 +7,7 @@
 <p align="center">
   <a href="#-о-проекте">О проекте</a> •
   <a href="#-ключевые-возможности">Возможности</a> •
-  <a href="#-технологический-стек">Стек технологий</a> •
-  <a href="#-архитектура-проекта">Архитектура</a> •
-  <a href="#-быстрый-старт">Запуск</a> •
-  <a href="#-планы-по-развитию">Roadmap</a>
+  <a href="#-технологический-стек">Стек технологий</a>
 </p>
 
 <p align="center">
@@ -56,7 +53,6 @@
 ### **Backend**
 - **Язык:** [Java](https://www.java.com/)
 - **Фреймворк:** [Spring Boot](https://spring.io/projects/spring-boot) (Spring MVC, Spring Data, Spring Security)
-- **Сборщик:** Maven / Gradle
 - **Архитектура:** RESTful API
 
 ### **Frontend**
@@ -64,98 +60,6 @@
 - **Скрипты:** JavaScript (ES6+)
 - **Окружение:** [Node.js](https://nodejs.org/) & npm
 - **Стилизация:** Модульный CSS3 / Flexbox & Grid / Responsive UI
-
-<details>
-<summary>📋 <b>Иконки и бейджи стека</b></summary>
-
-```markdown
-- Java: https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white
-- Spring: https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white
-- React: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
-- JavaScript: https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black
-- Node.js: https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white
-- CSS3: https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white
-```
-</details>
-
----
-
-## 📂 Структура проекта
-
-```text
-TravelSplit/
-├── backend/                # Серверная часть (Java + Spring Boot)
-│   ├── src/
-│   │   ├── main/java/      # Контроллеры, сервисы, репозитории, модели
-│   │   └── main/resources/ # application.properties / конфигурация
-│   └── pom.xml (build.gradle)
-│
-├── frontend/               # Клиентская часть (React SPA)
-│   ├── public/             # Статические ресурсы
-│   ├── src/
-│   │   ├── components/     # UI-компоненты (карточки, модалки, списки)
-│   │   ├── pages/          # Страницы (Поездки, Расходы, Маршрут)
-│   │   ├── services/       # Интеграция с Backend API
-│   │   └── App.js
-│   └── package.json
-│
-└── README.md
-```
-
----
-
-## 🚀 Быстрый старт
-
-### Требования
-- JDK 17 или выше
-- Node.js v18+ и npm
-- Git
-
-### 1. Клонирование репозитория
-```bash
-git clone https://github.com/An4ooys/TravelSplit.git
-cd TravelSplit
-```
-
-### 2. Запуск Backend (Spring Boot)
-```bash
-cd backend
-# Если используется Maven:
-./mvnw spring-boot:run
-# Или Gradle:
-./gradlew bootRun
-```
-*Сервер запустится по адресу:* `http://localhost:8080`
-
-### 3. Запуск Frontend (React)
-```bash
-cd ../frontend
-npm install
-npm start
-```
-*Клиентское приложение откроется по адресу:* `http://localhost:3000`
-
----
-
-## 🗺️ Дорожная карта (Roadmap)
-
-- [x] Инициализация архитектуры репозитория
-- [ ] Аутентификация и профили пользователей (JWT / Spring Security)
-- [ ] CRUD поездок и участников
-- [ ] Модуль учета расходов и алгоритм оптимизации долгов (Debt Simplification)
-- [ ] Загрузка и прикрепление билетов / броней (PDF, изображения)
-- [ ] Интерактивная карта маршрута (OpenStreetMap / Google Maps)
-- [ ] Офлайн-режим (PWA)
-
----
-
-## 🤝 Вклад в проект (Contributing)
-
-1. Сделайте Fork репозитория
-2. Создайте ветку фичи: `git checkout -b feature/AmazingFeature`
-3. Зафиксируйте изменения: `git commit -m 'feat: Add some AmazingFeature'`
-4. Отправьте ветку: `git push origin feature/AmazingFeature`
-5. Откройте **Pull Request**
 
 ---
 
