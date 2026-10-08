@@ -7,6 +7,11 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/github/commit-activity/t/An4ooys/TravelSplit?style=for-the-badge&logo=git&logoColor=white&color=6366f1&label=commits" alt="Commits" />
+  <img src="https://img.shields.io/github/last-commit/An4ooys/TravelSplit?style=for-the-badge&logo=github&logoColor=white&color=10b981&label=last%20commit" alt="Last Commit" />
+</p>
+
+<p align="center">
   <a href="#-о-проекте">О проекте</a> •
   <a href="#-ключевые-возможности">Возможности</a> •
   <a href="#-технологический-стек">Стек технологий</a>
