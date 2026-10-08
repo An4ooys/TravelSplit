@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/travelsplit-banner-v3.svg" alt="TravelSplit — plan together, travel together, split fairly" width="100%" />
+  <img src="assets/travelsplit-banner-v4.svg" alt="TravelSplit — plan together, travel together, split fairly" width="100%" />
 </p>
 
 <p align="center">
