@@ -1,4 +1,6 @@
-# <p align="center">✈️ TravelSplit 🌍</p>
+<p align="center">
+  <img src="assets/travelsplit-banner.svg" alt="TravelSplit — plan together, travel together, split fairly" width="100%" />
+</p>
 
 <p align="center">
   <strong>Умный веб-сервис для совместного планирования путешествий и разделения расходов</strong>
