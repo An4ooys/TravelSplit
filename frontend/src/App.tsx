@@ -235,7 +235,7 @@ export default function App() {
                   </div>
                   <div style={{ marginTop: 'var(--spacing-36)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-ash-gray)', fontSize: '13px' }}>
                     <span style={{ color: 'var(--color-saffron-spark)' }}>✦</span>
-                    <span>Листайте страницу — созвездие плавно перерождается в 3D-символы каждого этапа пути</span>
+                    <span>Листайте страницу — созвездие оживает и меняет 3D-форму: Горы → Планета → Компас → Звезда</span>
                   </div>
                 </div>
                 {/* Visual column is pure void: background 3D canvas shines through */}
@@ -303,7 +303,7 @@ export default function App() {
             <section id="friends" className="dala-section" aria-labelledby="friends-title">
               <div className="dala-two-col">
                 <div className="dala-text-col">
-                  <span className="kicker-amber">02 · ДРУЖЕСКИЙ КРУГ</span>
+                  <span className="kicker-amber">02 · ДРУЖЕСКИЙ КРУГ · КОМПАС ЭКСПЕДИЦИИ</span>
                   <h2 id="friends-title" className="heading-section">
                     Только друзья.<br />Без начальников.
                   </h2>
@@ -336,7 +336,7 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-                {/* Visual column: 3D campfire & tent constellation shines here */}
+                {/* Visual column: 3D compass constellation shines here */}
                 <div className="dala-visual-col" aria-hidden="true" />
               </div>
             </section>
@@ -345,7 +345,7 @@ export default function App() {
             <section id="split" className="dala-section" aria-labelledby="split-title">
               <div className="dala-two-col">
                 <div className="dala-text-col">
-                  <span className="kicker-amber">03 · ЧЕСТНЫЙ СПЛИТ</span>
+                  <span className="kicker-amber">03 · ЧЕСТНЫЙ СПЛИТ · ЗВЕЗДА БАЛАНСА</span>
                   <h2 id="split-title" className="heading-section">
                     Расчет до копейки.<br />Без неловких пауз.
                   </h2>

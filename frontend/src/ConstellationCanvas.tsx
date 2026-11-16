@@ -10,10 +10,10 @@ type Point3D = {
 
 type Particle = {
   // 4 target shape positions
-  s0: Point3D; // Mountain
-  s1: Point3D; // Globe
-  s2: Point3D; // Campfire & Tent
-  s3: Point3D; // Compass
+  s0: Point3D; // Mountain Peaks (Hero)
+  s1: Point3D; // 3D Globe (Expeditions)
+  s2: Point3D; // 3D Compass (Friends / Navigation)
+  s3: Point3D; // 3D Star (Split / Balance)
 
   size: number;
   angle: number;
@@ -61,8 +61,7 @@ export default function ConstellationCanvas({
     let curRotY = 0;
     let curRotX = 0;
 
-    // Scroll state tracking
-    let scrollProgress = 0;
+    // Scroll stage tracking
     let smoothScrollStage = 0;
 
     const TOTAL_PARTICLES = 2200;
@@ -93,7 +92,6 @@ export default function ConstellationCanvas({
       // Ridge facets (3 main ridges like Matterhorn)
       const ridgeIndex = i % 3;
       const baseRidgeAngle = (ridgeIndex * 2 * Math.PI) / 3;
-      // Slight angular spread around ridges
       const spread = (Math.sin(i * 12.9898) * 0.45) * Math.pow(frac, 0.6);
       const angle = baseRidgeAngle + spread;
 
@@ -136,7 +134,7 @@ export default function ConstellationCanvas({
         Math.sin(lat * 3.0 + lon * 2.0) * Math.cos(lon * 2.0 - lat) +
         0.3 * Math.sin(lat * 7.0);
 
-      const isLand = continentShape > 0.1 || Math.abs(lat) < 0.04; // continents + equator
+      const isLand = continentShape > 0.1 || Math.abs(lat) < 0.04;
       const rad = isLand ? R : R * 0.95;
 
       const x = rad * Math.sin(phi) * Math.cos(theta);
@@ -144,10 +142,8 @@ export default function ConstellationCanvas({
       const z = rad * Math.sin(phi) * Math.sin(theta);
 
       const color = isLand
-        ? Math.random() > 0.4
-          ? '#ffb829' // Golden continents
-          : '#8052ff' // Iris mountain chains
-        : '#15846e'; // Deep ocean
+        ? (i % 3 === 0 ? '#ffb829' : '#8052ff')
+        : '#15846e';
 
       return {
         x,
@@ -159,108 +155,209 @@ export default function ConstellationCanvas({
     }
 
     // -------------------------------------------------------------
-    // SHAPE 2: CAMPFIRE & ALPINE TENT (Костер и Палатка)
+    // SHAPE 2: 3D EXPEDITION COMPASS (Компас вместо палатки)
     // -------------------------------------------------------------
-    function getCampfireTentPoint(i: number, total: number): Point3D {
-      // 50% particles: A-frame Tent
-      if (i < total * 0.5) {
-        const u = (i / (total * 0.5)); // 0..1 along tent length
-        const z = -0.9 + u * 1.8;
-        const side = i % 2 === 0 ? 1 : -1;
-        const v = ((i * 13) % 100) / 100; // from ridge (0) to ground (1)
+    function getCompassPoint(i: number, total: number): Point3D {
+      // 30% particles: Azimuth dial rings
+      if (i < total * 0.3) {
+        const u = i / (total * 0.3);
+        const isOuter = i % 2 === 0;
+        const ringR = isOuter ? 1.35 : 1.12;
+        const angle = u * Math.PI * 2;
 
-        const ridgeY = -0.85;
-        const groundY = 0.75;
-        const y = ridgeY + v * (groundY - ridgeY);
-        const x = side * v * 1.15;
-
-        const isRidge = v < 0.08;
+        // Tick marks at cardinal directions
+        const isCardinal = (i % 8 === 0);
         return {
-          x,
-          y,
-          z,
-          color: isRidge ? '#ffb829' : side > 0 ? '#8052ff' : '#15846e',
-          size: isRidge ? 2.8 : 2.0,
+          x: ringR * Math.cos(angle),
+          y: ringR * Math.sin(angle),
+          z: isCardinal ? 0.04 : 0.0,
+          color: isCardinal ? '#ffb829' : '#8052ff',
+          size: isCardinal ? 2.8 : 1.9,
         };
       }
 
-      // 35% particles: Campfire Flame (bulb/flame shape like in user Image 2)
+      // 55% particles: 4-pointed magnetic needle
       if (i < total * 0.85) {
-        const t = (i - total * 0.5) / (total * 0.35); // 0..1 from base to tip of flame
-        const flameY = 0.75 - t * 1.55; // rises upwards
-        // Tear-drop / flame width
-        const widthAtT = Math.sin(t * Math.PI) * (1 - t * 0.5) * 0.65;
-        const angle = i * 2.39996; // Golden angle distribution
-        const r = Math.sqrt(((i * 7) % 100) / 100) * widthAtT;
+        const needleIdx = i - Math.floor(total * 0.3);
+        const needleTotal = Math.floor(total * 0.55);
+        const arm = needleIdx % 4; // 0=North, 1=South, 2=East, 3=West
+        const frac = (Math.floor(needleIdx / 4) / (needleTotal / 4)); // 0 (center) to 1 (tip)
 
-        const x = 0.0 + r * Math.cos(angle);
-        const z = 0.85 + r * Math.sin(angle);
-
-        const color =
-          t < 0.25
-            ? '#ffffff' // White base
-            : t < 0.65
-            ? '#ffb829' // Golden core
-            : '#d946ef'; // Magenta tip
-
-        return {
-          x,
-          y: flameY,
-          z,
-          color,
-          size: 2.2 + (1 - t) * 1.6,
-        };
+        if (arm === 0) {
+          // North Arrow: Points UP (y < 0), sharp golden needle
+          const length = 1.55;
+          const y = -frac * length;
+          const w = (1 - frac) * 0.22;
+          const side = needleIdx % 2 === 0 ? 1 : -1;
+          const x = side * w * ((needleIdx * 7) % 100) / 100;
+          return {
+            x,
+            y,
+            z: (1 - frac) * 0.08,
+            color: frac > 0.85 ? '#ffffff' : '#ffb829',
+            size: frac > 0.85 ? 3.0 : 2.2,
+          };
+        } else if (arm === 1) {
+          // South Arrow: Points DOWN (y > 0), violet needle
+          const length = 1.55;
+          const y = frac * length;
+          const w = (1 - frac) * 0.22;
+          const side = needleIdx % 2 === 0 ? 1 : -1;
+          const x = side * w * ((needleIdx * 7) % 100) / 100;
+          return {
+            x,
+            y,
+            z: (1 - frac) * 0.08,
+            color: '#8052ff',
+            size: 2.2,
+          };
+        } else if (arm === 2) {
+          // East Arrow: Points RIGHT (x > 0)
+          const length = 1.25;
+          const x = frac * length;
+          const w = (1 - frac) * 0.16;
+          const side = needleIdx % 2 === 0 ? 1 : -1;
+          const y = side * w * ((needleIdx * 7) % 100) / 100;
+          return {
+            x,
+            y,
+            z: (1 - frac) * 0.05,
+            color: '#15846e',
+            size: 2.0,
+          };
+        } else {
+          // West Arrow: Points LEFT (x < 0)
+          const length = 1.25;
+          const x = -frac * length;
+          const w = (1 - frac) * 0.16;
+          const side = needleIdx % 2 === 0 ? 1 : -1;
+          const y = side * w * ((needleIdx * 7) % 100) / 100;
+          return {
+            x,
+            y,
+            z: (1 - frac) * 0.05,
+            color: '#38bdf8',
+            size: 2.0,
+          };
+        }
       }
 
-      // 15% Stars around camp
-      const starIdx = i - total * 0.85;
-      const angle = starIdx * 0.35;
-      const rad = 1.3 + (starIdx % 20) * 0.05;
+      // 15% particles: Center brass jewel & 4 diagonal rays
+      const subIdx = i - Math.floor(total * 0.85);
+      const subTotal = Math.floor(total * 0.15);
+      const diagAngle = ((subIdx % 4) * Math.PI) / 2 + Math.PI / 4;
+      const dist = 0.25 + (subIdx / subTotal) * 0.65;
       return {
-        x: rad * Math.cos(angle) * 1.5,
-        y: -1.0 - (starIdx % 15) * 0.03,
-        z: rad * Math.sin(angle),
+        x: dist * Math.cos(diagAngle),
+        y: dist * Math.sin(diagAngle),
+        z: (subIdx % 5 - 2) * 0.02,
         color: '#ffb829',
-        size: 1.8,
+        size: 2.0,
       };
     }
 
     // -------------------------------------------------------------
-    // SHAPE 3: 3D COMPASS ROSE & BALANCE EMBLEM (Компас)
+    // SHAPE 3: 3D MULTI-POINTED GEOMETRIC STAR (Звезда баланса)
     // -------------------------------------------------------------
-    function getCompassPoint(i: number, total: number): Point3D {
-      // 35% Concentric celestial rings
-      if (i < total * 0.35) {
-        const angle = (i / (total * 0.35)) * Math.PI * 2;
-        const ringRad = i % 2 === 0 ? 1.38 : 1.08;
+    function getStarPoint(i: number, total: number): Point3D {
+      // 60% particles: 6 Cardinal 3D Spikes (+Y, -Y, +X, -X, +Z, -Z)
+      if (i < total * 0.6) {
+        const spikeTotal = Math.floor(total * 0.6);
+        const spikeIdx = i % 6;
+        const frac = Math.floor(i / 6) / (spikeTotal / 6); // 0 (center) to 1 (sharp apex)
+        const armLength = 1.62;
+        const dist = frac * armLength;
+        const w = Math.pow(1 - frac, 1.2) * 0.28; // pyramidal tapering
+
+        const sideAngle = (i * 2.39996);
+        const sideR = w * Math.sqrt(((i * 13) % 100) / 100);
+        const off1 = sideR * Math.cos(sideAngle);
+        const off2 = sideR * Math.sin(sideAngle);
+
+        let x = 0;
+        let y = 0;
+        let z = 0;
+
+        if (spikeIdx === 0) {
+          // Top spike (+Y up)
+          y = -dist;
+          x = off1;
+          z = off2;
+        } else if (spikeIdx === 1) {
+          // Bottom spike (-Y down)
+          y = dist;
+          x = off1;
+          z = off2;
+        } else if (spikeIdx === 2) {
+          // Right spike (+X)
+          x = dist;
+          y = off1;
+          z = off2;
+        } else if (spikeIdx === 3) {
+          // Left spike (-X)
+          x = -dist;
+          y = off1;
+          z = off2;
+        } else if (spikeIdx === 4) {
+          // Front 3D spike (+Z)
+          z = dist;
+          x = off1;
+          y = off2;
+        } else {
+          // Back 3D spike (-Z)
+          z = -dist;
+          x = off1;
+          y = off2;
+        }
+
+        const isApex = frac > 0.88;
         return {
-          x: ringRad * Math.cos(angle),
-          y: ringRad * Math.sin(angle),
-          z: ((i * 7) % 20 - 10) * 0.008,
-          color: ringRad > 1.2 ? '#8052ff' : '#ffb829',
-          size: 2.2,
+          x,
+          y,
+          z,
+          color: isApex ? '#ffffff' : frac > 0.5 ? '#ffb829' : '#8052ff',
+          size: isApex ? 3.2 : 2.2,
         };
       }
 
-      // 65% 8-pointed Windrose Compass
-      const ptIndex = i % 8;
-      const angle = (ptIndex / 8) * Math.PI * 2;
-      const isMajor = ptIndex % 2 === 0;
-      const armLength = isMajor ? 1.48 : 0.92;
+      // 25% particles: 8 Diagonal 3D Octant Spikes (Stella Octangula)
+      if (i < total * 0.85) {
+        const octantIdx = i % 8;
+        const sx = octantIdx & 1 ? 1 : -1;
+        const sy = octantIdx & 2 ? 1 : -1;
+        const sz = octantIdx & 4 ? 1 : -1;
 
-      const subIdx = Math.floor(i / 8);
-      const frac = ((subIdx * 19) % 100) / 100;
-      const dist = frac * armLength;
-      const perpAngle = angle + Math.PI / 2;
-      const w = (1 - frac) * 0.18;
-      const side = subIdx % 2 === 0 ? 1 : -1;
+        const subFrac = ((i * 17) % 100) / 100;
+        const len = subFrac * 1.18;
+        const norm = Math.sqrt(3);
+
+        const x = (sx / norm) * len;
+        const y = (sy / norm) * len;
+        const z = (sz / norm) * len;
+
+        const isTip = subFrac > 0.85;
+        return {
+          x,
+          y,
+          z,
+          color: isTip ? '#38bdf8' : '#8052ff',
+          size: isTip ? 2.8 : 2.0,
+        };
+      }
+
+      // 15% particles: Center Glowing Starlight Nucleus
+      const coreIdx = i - Math.floor(total * 0.85);
+      const coreTotal = Math.floor(total * 0.15);
+      const phi = Math.acos(-1 + (2 * coreIdx) / coreTotal);
+      const theta = Math.sqrt(coreTotal * Math.PI) * phi;
+      const coreR = Math.pow(((coreIdx * 19) % 100) / 100, 0.5) * 0.35;
 
       return {
-        x: dist * Math.cos(angle) + side * w * Math.cos(perpAngle),
-        y: dist * Math.sin(angle) + side * w * Math.sin(perpAngle),
-        z: (1 - frac) * (subIdx % 5 - 2) * 0.04,
-        color: isMajor ? '#ffb829' : '#38bdf8',
-        size: isMajor && frac > 0.85 ? 3.4 : 2.2,
+        x: coreR * Math.sin(phi) * Math.cos(theta),
+        y: coreR * Math.cos(phi),
+        z: coreR * Math.sin(phi) * Math.sin(theta),
+        color: coreIdx % 2 === 0 ? '#ffb829' : '#ffffff',
+        size: 2.4,
       };
     }
 
@@ -268,8 +365,8 @@ export default function ConstellationCanvas({
     for (let i = 0; i < TOTAL_PARTICLES; i++) {
       const s0 = getMountainPoint(i, TOTAL_PARTICLES);
       const s1 = getGlobePoint(i, TOTAL_PARTICLES);
-      const s2 = getCampfireTentPoint(i, TOTAL_PARTICLES);
-      const s3 = getCompassPoint(i, TOTAL_PARTICLES);
+      const s2 = getCompassPoint(i, TOTAL_PARTICLES);
+      const s3 = getStarPoint(i, TOTAL_PARTICLES);
 
       particles.push({
         s0,
@@ -278,18 +375,18 @@ export default function ConstellationCanvas({
         s3,
         size: s0.size,
         angle: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 0.008, // very gentle triangle orientation spin
+        rotSpeed: (Math.random() - 0.5) * 0.008,
         color: s0.color,
-        alpha: 0.72 + (i % 28) * 0.01, // steady, calm opacity (no twitching!)
+        alpha: 0.72 + (i % 28) * 0.01,
       });
     }
 
-    // Foreground 3D wireframe floating geometric triangles (from user reference images)
+    // Foreground 3D wireframe floating geometric tetrahedrons (placed on right side so text is never overlapped)
     const foregroundGlyphs: ForegroundGlyph[] = [
-      { x: -1.35, y: -0.4, z: -0.85, size: 46, rotX: 0.2, rotY: 0.1, rotZ: 0.4, speedX: 0.003, speedY: 0.004, speedZ: 0.002, color: '#ffb829' },
-      { x: 1.25, y: 0.35, z: -0.8, size: 54, rotX: -0.3, rotY: 0.4, rotZ: 0.1, speedX: -0.002, speedY: 0.005, speedZ: -0.003, color: '#8052ff' },
-      { x: 0.95, y: -0.75, z: -1.05, size: 34, rotX: 0.5, rotY: -0.2, rotZ: 0.3, speedX: 0.004, speedY: -0.003, speedZ: 0.004, color: '#15846e' },
-      { x: -0.95, y: 0.65, z: -0.75, size: 40, rotX: 0.1, rotY: 0.6, rotZ: -0.3, speedX: -0.003, speedY: 0.004, speedZ: 0.003, color: '#38bdf8' },
+      { x: 1.35, y: -0.5, z: -0.85, size: 48, rotX: 0.2, rotY: 0.1, rotZ: 0.4, speedX: 0.003, speedY: 0.004, speedZ: 0.002, color: '#ffb829' },
+      { x: 1.15, y: 0.55, z: -0.8, size: 52, rotX: -0.3, rotY: 0.4, rotZ: 0.1, speedX: -0.002, speedY: 0.005, speedZ: -0.003, color: '#8052ff' },
+      { x: 1.45, y: 0.15, z: -1.05, size: 36, rotX: 0.5, rotY: -0.2, rotZ: 0.3, speedX: 0.004, speedY: -0.003, speedZ: 0.004, color: '#15846e' },
+      { x: 0.55, y: -0.85, z: -0.75, size: 40, rotX: 0.1, rotY: 0.6, rotZ: -0.3, speedX: -0.003, speedY: 0.004, speedZ: 0.003, color: '#38bdf8' },
     ];
 
     // Resize handler
@@ -318,16 +415,56 @@ export default function ConstellationCanvas({
       targetRotX = -ny * 0.22;
     }
 
-    // Scroll tracking
-    function handleScroll() {
-      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      const currentScroll = window.scrollY || window.pageYOffset;
-      scrollProgress = Math.min(1, Math.max(0, currentScroll / maxScroll));
+    // Precise Stage Calculation based on actual section viewport presence
+    function getTargetStage(): number {
+      const heroEl = document.getElementById('hero-title') || document.querySelector('.dala-section');
+      const tripsEl = document.getElementById('trips');
+      const friendsEl = document.getElementById('friends');
+      const splitEl = document.getElementById('split');
+
+      if (!heroEl || !tripsEl || !friendsEl || !splitEl) {
+        const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+        const cur = window.scrollY || window.pageYOffset;
+        return Math.min(3, Math.max(0, (cur / maxScroll) * 3));
+      }
+
+      const vCenter = (window.scrollY || window.pageYOffset) + window.innerHeight * 0.48;
+
+      const getY = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return r.top + (window.scrollY || window.pageYOffset) + r.height * 0.48;
+      };
+
+      const y0 = getY(heroEl);
+      const y1 = getY(tripsEl);
+      const y2 = getY(friendsEl);
+      const y3 = getY(splitEl);
+
+      let raw: number;
+      if (vCenter <= y0) {
+        raw = 0;
+      } else if (vCenter < y1) {
+        raw = (vCenter - y0) / Math.max(1, y1 - y0);
+      } else if (vCenter < y2) {
+        raw = 1 + (vCenter - y1) / Math.max(1, y2 - y1);
+      } else if (vCenter < y3) {
+        raw = 2 + (vCenter - y2) / Math.max(1, y3 - y2);
+      } else {
+        // Once viewing Section 3 (Split), the stage is 100% at 3.0!
+        raw = 3.0;
+      }
+
+      // Generous snap plateau around each integer stage:
+      // When the user pauses or views a section, the shape is 100% assembled and solid!
+      const nearest = Math.round(raw);
+      if (Math.abs(raw - nearest) < 0.22) {
+        return nearest;
+      }
+
+      return raw;
     }
 
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
 
     // Draw single outlined triangle
     function drawTriangle(
@@ -443,16 +580,17 @@ export default function ConstellationCanvas({
       curRotY += (targetRotY - curRotY) * 0.05;
       curRotX += (targetRotX - curRotX) * 0.05;
 
-      // Map scroll progress (0..1) smoothly across 4 states:
+      // Map scroll smoothly across 4 states:
       // 0.0 -> Mountains (Hero)
       // 1.0 -> Globe (Expeditions)
-      // 2.0 -> Campfire & Tent (Friends)
-      // 3.0 -> Compass (Smart Split)
-      const targetStage = scrollProgress * 3.0;
-      smoothScrollStage += (targetStage - smoothScrollStage) * 0.08;
+      // 2.0 -> Compass (Friends)
+      // 3.0 -> Star (Split)
+      const targetStage = getTargetStage();
+      smoothScrollStage += (targetStage - smoothScrollStage) * 0.10;
 
-      const stageIndex = Math.min(2, Math.floor(smoothScrollStage));
-      const frac = smoothScrollStage - stageIndex;
+      const clampedStage = Math.max(0, Math.min(3, smoothScrollStage));
+      const stageIndex = Math.min(2, Math.floor(clampedStage));
+      const frac = clampedStage >= 3 ? 1.0 : clampedStage - stageIndex;
 
       // Clean cubic S-curve easing: NO jitter, pure laminar transition!
       const easeFrac = frac * frac * (3 - 2 * frac);
@@ -486,7 +624,6 @@ export default function ConstellationCanvas({
         const p = particles[i];
         p.angle += p.rotSpeed;
 
-        // Fetch start and end points for current morph interval
         let fromPt: Point3D;
         let toPt: Point3D;
 
@@ -509,11 +646,11 @@ export default function ConstellationCanvas({
         const currentColor = easeFrac > 0.5 ? toPt.color : fromPt.color;
         const currentSize = fromPt.size + (toPt.size - fromPt.size) * easeFrac;
 
-        // Solid rigid 3D object rotation
-        const x1 = bx * cosY - bz * sinY;
-        const z1 = bx * sinY + bz * cosY;
-        const y2 = by * cosX - z1 * sinX;
-        const z2 = by * sinX + z1 * cosX;
+        // 3D rotation matrix
+        let x1 = bx * cosY - bz * sinY;
+        let z1 = bx * sinY + bz * cosY;
+        let y2 = by * cosX - z1 * sinX;
+        let z2 = by * sinX + z1 * cosX;
 
         const depth = fov / (fov + z2);
         const screenX = cx + x1 * scale * depth;
@@ -526,21 +663,22 @@ export default function ConstellationCanvas({
           size: currentSize * depth,
           angle: p.angle,
           color: currentColor,
-          alpha: p.alpha,
+          alpha: p.alpha * Math.min(1, Math.max(0.35, depth * 0.95)),
         });
       }
 
       // Depth sort particles
       toRender.sort((a, b) => b.z - a.z);
 
+      // Draw all triangles
       for (let i = 0; i < toRender.length; i++) {
-        const p = toRender[i];
-        drawTriangle(context, p.x, p.y, p.size, p.angle, p.color, p.alpha);
+        const pt = toRender[i];
+        drawTriangle(context, pt.x, pt.y, pt.size, pt.angle, pt.color, pt.alpha);
       }
 
-      // Draw foreground tumbling wireframe triangles
-      for (let k = 0; k < foregroundGlyphs.length; k++) {
-        drawHollowGlyph(context, foregroundGlyphs[k], cx, cy, scale, fov);
+      // Draw tumbling foreground wireframe tetrahedrons
+      for (const g of foregroundGlyphs) {
+        drawHollowGlyph(context, g, cx, cy, scale, fov);
       }
 
       animId = requestAnimationFrame(render);
@@ -550,34 +688,25 @@ export default function ConstellationCanvas({
 
     return () => {
       cancelAnimationFrame(animId);
-      resizeObserver.disconnect();
       window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('scroll', handleScroll);
+      resizeObserver.disconnect();
     };
   }, []);
 
   return (
-    <div
-      className={`constellation-container ${className}`}
+    <canvas
+      ref={canvasRef}
+      className={`fixed inset-0 w-full h-full pointer-events-none z-0 ${className}`}
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
         zIndex: 0,
         pointerEvents: 'none',
-        overflow: 'hidden',
       }}
-    >
-      <canvas
-        ref={canvasRef}
-        style={{
-          display: 'block',
-          width: '100%',
-          height: '100%',
-          background: '#000000',
-        }}
-        aria-label="3D созвездие: горы, глобус, костер и компас"
-        role="img"
-      />
-    </div>
+      aria-hidden="true"
+    />
   );
 }
