@@ -1,6 +1,9 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import ThemeArc, { times, type TimeOfDay } from './ThemeArc';
 import TripPage from './TripPage';
+import Appearance, { landscapes, fonts } from './Appearance';
+import Scenery from './Scenery';
+
 import { trips } from './trips';
 
 function initialTime(): TimeOfDay {
@@ -20,6 +23,18 @@ function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
 }
 
 export default function App() {
+  const [landscape, setLandscape] = useState(() => {
+    const saved = localStorage.getItem('travelsplit-landscape') || import.meta.env.VITE_DEFAULT_BACKGROUND;
+    return landscapes.some((item) => item.id === saved) ? saved : 'mist';
+  });
+  const [font, setFont] = useState(() => localStorage.getItem('travelsplit-font') || 'sans');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [motion, setMotion] = useState(() => localStorage.getItem('travelsplit-motion') !== 'off');
+  useEffect(() => {
+    localStorage.setItem('travelsplit-landscape', landscape);
+    localStorage.setItem('travelsplit-font', font);
+    localStorage.setItem('travelsplit-motion', motion ? 'on' : 'off');
+  }, [landscape, font, motion]);
   const [time, setTime] = useState<TimeOfDay>(initialTime);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(tripIdFromPath);
   const selectedTrip = trips.find((trip) => trip.id === selectedTripId);
@@ -57,12 +72,9 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell theme-${time}`}>
-      <div className="scene-image" aria-hidden="true" />
-      <div className="scene-tint" aria-hidden="true" />
-      <div className="scene-rays" aria-hidden="true" />
-      <div className="scene-stars" aria-hidden="true" />
-
+    <div className={`app-shell theme-${time} landscape-${landscape} ${motion ? '' : 'motion-paused'}`} style={{ fontFamily: fonts.find((item) => item.id === font)?.family || fonts[0].family }}>
+      <Scenery landscape={landscape} time={time} motion={motion} />
+      {settingsOpen && <Appearance landscape={landscape} font={font} motion={motion} onLandscape={setLandscape} onFont={setFont} onMotion={() => setMotion(!motion)} onClose={() => setSettingsOpen(false)} />}
       <div className="page-frame">
         <header className="site-header">
           <div className="wordmark" aria-label={import.meta.env.VITE_APP_TITLE || 'TravelSplit'}>
@@ -75,26 +87,26 @@ export default function App() {
             <span>{import.meta.env.VITE_APP_TITLE || 'TravelSplit'}</span>
           </div>
           <ThemeArc value={time} onChange={setTime} />
-          <div className="profile" aria-label="Демо-профиль Анны">
+          <div className="header-actions"><button className="appearance-trigger" onClick={() => setSettingsOpen(true)}><span aria-hidden="true">◉</span> Оформление</button><div className="profile" aria-label="Демо-профиль Анны">
             <span className="profile-name">Анна</span>
             <span className="profile-avatar" aria-hidden="true">А</span>
-          </div>
+          </div></div>
         </header>
 
         {selectedTrip ? (
-          <TripPage trip={selectedTrip} onBack={closeTrip} />
+          <TripPage key={selectedTrip.id} trip={selectedTrip} onBack={closeTrip} />
         ) : (
-        <main className="home-content">
+        <main className="home-content" key="home">
           <div className="intro">
-            <p className="eyebrow">ВАШЕ ПРОСТРАНСТВО</p>
-            <h1>С возвращением, Анна</h1>
-            <p className="intro-subtitle">Здесь живут планы ваших путешествий.</p>
+            <p className="eyebrow">TRAVELSPLIT / ВАШИ ПУТЕШЕСТВИЯ</p>
+            <h1>Ближе к миру.<br /><em>Ближе друг к другу.</em></h1>
+            <p className="intro-subtitle">С возвращением, Анна. Куда отправимся вместе?</p>
           </div>
 
           <section className="trip-section" aria-labelledby="trip-section-heading">
             <div className="section-heading">
               <h2 id="trip-section-heading">Мои поездки</h2>
-              <span>01 / 03</span>
+              <span>3 путешествия</span>
             </div>
 
             <a className="featured-trip trip-link" href={`/trips/${featuredTrip.id}`} onClick={(event) => openTrip(event, featuredTrip.id)} aria-label={`Открыть поездку: ${featuredTrip.place}`}>
@@ -104,7 +116,7 @@ export default function App() {
               </div>
               <div className="featured-copy">
                 <div className="featured-topline">
-                  <span className="trip-kicker">ВПЕРЕДИ ПРИКЛЮЧЕНИЕ</span>
+                  <span className="trip-kicker">БЛИЖАЙШЕЕ ПУТЕШЕСТВИЕ</span>
                   <span className="trip-dates">{featuredTrip.dates}</span>
                 </div>
                 <h3>{featuredTrip.place}</h3>
@@ -137,18 +149,18 @@ export default function App() {
                   </div>
                 </a>
               ))}
-              <div className="future-note" aria-label="Место для будущей поездки">
+              <button className="future-note" onClick={() => setSettingsOpen(true)} aria-label="Выбрать настроение путешествия">
                 <span className="future-symbol" aria-hidden="true">＋</span>
-                <span>Здесь может быть<br />ваша следующая поездка</span>
-              </div>
+                <span>Выбрать пейзаж<br />для новых планов</span>
+              </button>
             </div>
           </section>
         </main>
         )}
 
         <footer className="site-footer">
-          <span>Путешествие начинается с планов.</span>
-          <span>TravelSplit · {selectedTrip ? 'моя поездка' : 'мои поездки'}</span>
+          <span>Планы, которые хочется воплотить.</span>
+          <button className="landscape-caption" onClick={() => setSettingsOpen(true)}>{landscapes.find((item) => item.id === landscape)?.name} <span aria-hidden="true">↗</span></button>
         </footer>
       </div>
     </div>
