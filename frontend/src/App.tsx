@@ -135,6 +135,9 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {/* Scroll-driven Constellation Canvas Background */}
+      <ConstellationCanvas />
+
       <div className="page-frame">
         {/* Top Minimal Navigation Bar */}
         <header className="site-header" role="banner">
@@ -148,15 +151,14 @@ export default function App() {
             <span className="logo-mark" aria-hidden="true">
               <svg viewBox="0 0 28 28" fill="none">
                 <defs>
-                  <linearGradient id="dala-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <linearGradient id="ts-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor="#8052ff" />
                     <stop offset="100%" stopColor="#15846e" />
                   </linearGradient>
                 </defs>
-                {/* Mountain Ridge Icon */}
                 <path
                   d="M14 4L25 23H3L14 4Z"
-                  stroke="url(#dala-logo-grad)"
+                  stroke="url(#ts-logo-grad)"
                   strokeWidth="2.2"
                   strokeLinejoin="round"
                 />
@@ -179,10 +181,10 @@ export default function App() {
                   <a href="#trips" className="nav-link">Поездки</a>
                 </li>
                 <li>
-                  <a href="#split" className="nav-link">Общий котел</a>
+                  <a href="#friends" className="nav-link">Компания</a>
                 </li>
                 <li>
-                  <a href="#friends" className="nav-link">Компания</a>
+                  <a href="#split" className="nav-link">Общий котел</a>
                 </li>
               </ul>
             </nav>
@@ -199,7 +201,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Selected Trip Full View OR Main Friendly Landing */}
+        {/* Selected Trip Full View OR Main Open Void Landing */}
         {selectedTrip ? (
           <TripPage
             trip={selectedTrip}
@@ -208,58 +210,52 @@ export default function App() {
           />
         ) : (
           <main id="main-content">
-            {/* Hero Section with Constellation Mountain Range */}
-            <section className="hero-section" aria-labelledby="hero-title">
-              <div>
-                <span className="kicker-amber">TRAVELSPLIT · ПУТЕШЕСТВИЯ С ДРУЗЬЯМИ</span>
-                <h1 id="hero-title" className="hero-headline">
-                  В горы вместе.<br />Без споров о деньгах.
-                </h1>
-                <p className="hero-body">
-                  Собрали рюкзаки, прыгнули в машину и поехали. Кто-то снял дом, кто-то заправил бак, а сервис сам разложит всё по полочкам и посчитает, кто кому сколько переводит.
-                </p>
-                <div className="hero-actions">
-                  <a
-                    href={`/trips/${activeTabTrip.id}`}
-                    className="btn-primary"
-                    onClick={(e) => handleOpenTrip(e, activeTabTrip.id)}
-                  >
-                    Открыть поездку →
-                  </a>
-                  <a href="#split" className="btn-ghost">
-                    Как делим расходы ↓
-                  </a>
+            {/* Hero Section — Open Void, 3D Constellation unobstructed on the right */}
+            <section className="dala-section" aria-labelledby="hero-title">
+              <div className="dala-two-col">
+                <div className="dala-text-col">
+                  <span className="kicker-amber">TRAVELSPLIT · ПУТЕШЕСТВИЯ С ДРУЗЬЯМИ</span>
+                  <h1 id="hero-title" className="heading-display">
+                    В горы вместе.<br />Без споров о деньгах.
+                  </h1>
+                  <p className="body-airy">
+                    Собрали рюкзаки, прыгнули в машину и поехали. Кто-то снял дом, кто-то заправил бак, а сервис сам разложит всё по полочкам и посчитает, кто кому сколько переводит.
+                  </p>
+                  <div className="hero-actions">
+                    <a
+                      href={`/trips/${activeTabTrip.id}`}
+                      className="btn-primary"
+                      onClick={(e) => handleOpenTrip(e, activeTabTrip.id)}
+                    >
+                      Открыть поездку →
+                    </a>
+                    <a href="#split" className="btn-ghost">
+                      Как делим расходы ↓
+                    </a>
+                  </div>
+                  <div style={{ marginTop: 'var(--spacing-36)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-ash-gray)', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--color-saffron-spark)' }}>✦</span>
+                    <span>Листайте страницу — созвездие плавно перерождается в 3D-символы каждого этапа пути</span>
+                  </div>
                 </div>
-              </div>
-
-              {/* Animated Mountain Range Constellation */}
-              <div className="hero-visual-wrap" aria-hidden="true">
-                <ConstellationCanvas preset="mountains" />
+                {/* Visual column is pure void: background 3D canvas shines through */}
+                <div className="dala-visual-col" aria-hidden="true" />
               </div>
             </section>
 
-            {/* Block 1: Наши поездки (Выбор маршрута) */}
-            <section id="trips" className="content-island" aria-labelledby="trips-block-title">
-              <div className="content-island-header">
-                <div>
-                  <span className="kicker-amber" style={{ marginBottom: '4px' }}>РАЗДЕЛ 01</span>
-                  <h2 id="trips-block-title" className="heading-subsection">
-                    Наши экспедиции ({tripsData.length})
+            {/* Section 01: Наши экспедиции */}
+            <section id="trips" className="dala-section" aria-labelledby="trips-title">
+              <div className="dala-two-col">
+                <div className="dala-text-col">
+                  <span className="kicker-amber">01 · НАШИ ЭКСПЕДИЦИИ</span>
+                  <h2 id="trips-title" className="heading-section">
+                    Маршруты<br />для своих
                   </h2>
-                </div>
-                <span style={{ color: '#9a9a9a', fontSize: '14px' }}>
-                  Выбирайте поездку, чтобы увидеть все детали
-                </span>
-              </div>
-
-              <div className="section-two-col" style={{ margin: 0 }}>
-                {/* Left: Selector */}
-                <div>
-                  <p className="body-light" style={{ marginBottom: '20px' }}>
-                    Три направления нашей компании. Выбирайте маршрут, чтобы увидеть кто едет, сколько скинулись и какой следующий шаг в пути.
+                  <p className="body-muted">
+                    Три экспедиции нашей компании. Выбирайте маршрут, чтобы увидеть кто едет, сколько скинулись и какой следующий шаг в пути.
                   </p>
 
-                  <div className="trips-nav-list" role="tablist">
+                  <div className="trips-clean-list" role="tablist">
                     {tripsData.map((t) => {
                       const isActive = t.id === activeTabTrip.id;
                       return (
@@ -267,147 +263,142 @@ export default function App() {
                           key={t.id}
                           role="tab"
                           aria-selected={isActive}
-                          className={`trips-nav-item ${isActive ? 'active' : ''}`}
+                          className={`trips-clean-item ${isActive ? 'active' : ''}`}
                           onClick={() => setActiveTabTripId(t.id)}
                         >
-                          <div>
-                            <div className="trips-nav-item-title">{t.place}</div>
-                            <div className="trips-nav-item-dates">{t.destination}</div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <span style={{ color: isActive ? '#ffb829' : '#9a9a9a', fontSize: '13px' }}>
-                              {t.dates}
-                            </span>
-                          </div>
+                          <span className="trips-clean-item-name">
+                            {t.place}
+                            {isActive && <span style={{ color: 'var(--color-saffron-spark)', fontSize: '16px' }}>→</span>}
+                          </span>
+                          <span className="trips-clean-item-dates">
+                            {t.destination} · {t.dates}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
-                </div>
 
-                {/* Right: Active Trip Card */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '20px', padding: '24px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <span style={{ color: '#ffb829', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.35px' }}>
-                      ВЫБРАННАЯ ПОЕЗДКА
-                    </span>
-                    <span style={{ color: '#9a9a9a', fontSize: '13px' }}>{activeTabTrip.duration}</span>
-                  </div>
-
-                  <h3 style={{ fontSize: '32px', fontWeight: 400, color: '#ffffff', marginBottom: '12px' }}>
-                    {activeTabTrip.place}
-                  </h3>
-
-                  <p className="body-light" style={{ marginBottom: '20px' }}>
-                    {activeTabTrip.description}
-                  </p>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ffb829', fontSize: '14px', marginBottom: '24px' }}>
-                    <span>✦ СЛЕДУЮЩЕЕ В ПЛАНЕ:</span>
-                    <strong style={{ color: '#ffffff', fontWeight: 400 }}>{activeTabTrip.next} ({activeTabTrip.nextWhen})</strong>
-                  </div>
-
-                  <div>
+                  <div style={{ marginTop: 'var(--spacing-24)', padding: 'var(--spacing-18) 0', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '14px', color: 'var(--color-saffron-spark)' }}>
+                      <span>✦ СЛЕДУЮЩИЙ ШАГ:</span>
+                      <strong style={{ color: 'var(--color-bone-white)', fontWeight: 400 }}>
+                        {activeTabTrip.next} ({activeTabTrip.nextWhen})
+                      </strong>
+                    </div>
                     <a
                       href={`/trips/${activeTabTrip.id}`}
                       className="btn-primary"
                       onClick={(e) => handleOpenTrip(e, activeTabTrip.id)}
                     >
-                      Перейти в поездку {activeTabTrip.place} →
+                      Перейти в {activeTabTrip.place} →
                     </a>
                   </div>
                 </div>
+                {/* Visual column: 3D globe animation rotates here */}
+                <div className="dala-visual-col" aria-hidden="true" />
               </div>
             </section>
 
-            {/* Block 2: Друзья в поездке (Компания) */}
-            <section id="friends" className="content-island" aria-labelledby="friends-block-title">
-              <div className="content-island-header">
-                <div>
-                  <span className="kicker-amber" style={{ marginBottom: '4px' }}>РАЗДЕЛ 02</span>
-                  <h2 id="friends-block-title" className="heading-subsection">
-                    Компания в пути ({activeTabTrip.members.length} друзей)
+            {/* Section 02: Компания в пути */}
+            <section id="friends" className="dala-section" aria-labelledby="friends-title">
+              <div className="dala-two-col">
+                <div className="dala-text-col">
+                  <span className="kicker-amber">02 · ДРУЖЕСКИЙ КРУГ</span>
+                  <h2 id="friends-title" className="heading-section">
+                    Только друзья.<br />Без начальников.
                   </h2>
-                </div>
-                <span style={{ color: '#9a9a9a', fontSize: '14px' }}>
-                  В поездке: {activeTabTrip.place}
-                </span>
-              </div>
+                  <p className="body-muted">
+                    В поездке у каждого своя суперсила. Никакой бюрократии: роли и обязанности распределены легко и по любви.
+                  </p>
 
-              <p className="body-light" style={{ marginBottom: '18px' }}>
-                Никакой бюрократии и строгих начальников — каждый друг берет на себя то, в чем он силен.
-              </p>
-
-              <div className="friends-grid">
-                {activeTabTrip.members.map((member) => (
-                  <div className="friend-card" key={member.name}>
-                    <div className="friend-badge" style={{ backgroundColor: `${member.color}22`, borderColor: member.color }}>
-                      {member.initials}
-                    </div>
-                    <h3 className="friend-name">{member.name}</h3>
-                    <span className="friend-role" style={{ color: member.color }}>{member.role}</span>
-                    <p className="friend-duty">{member.duty}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Block 3: Общий котел и расчеты (Сплит) */}
-            <section id="split" className="content-island" aria-labelledby="split-block-title">
-              <div className="content-island-header">
-                <div>
-                  <span className="kicker-amber" style={{ marginBottom: '4px' }}>РАЗДЕЛ 03</span>
-                  <h2 id="split-block-title" className="heading-subsection">
-                    Общий котел и честный расчет расходов
-                  </h2>
-                </div>
-                <span style={{ color: '#34d399', fontSize: '14px' }}>
-                  ✓ Рассчитано автоматически без споров
-                </span>
-              </div>
-
-              <div className="split-summary-grid">
-                <div className="split-stat-box">
-                  <span className="split-stat-title">ОБЩИЙ БЮДЖЕТ</span>
-                  <div className="split-stat-num">{formatRubles(activeTabTrip.budget)}</div>
-                </div>
-                <div className="split-stat-box">
-                  <span className="split-stat-title">ПОТРАЧЕНО КОМПАНИЕЙ</span>
-                  <div className="split-stat-num" style={{ color: '#8052ff' }}>
-                    {formatRubles(activeSettlements.spent)}
-                  </div>
-                </div>
-                <div className="split-stat-box">
-                  <span className="split-stat-title">ДОЛЯ С КАЖДОГО</span>
-                  <div className="split-stat-num" style={{ color: '#ffb829' }}>
-                    {formatRubles(activeSettlements.perPerson)}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 'var(--spacing-18)' }}>
-                <span className="label-violet" style={{ marginBottom: '14px' }}>
-                  КТО КОМУ ПЕРЕВОДИТ, ЧТОБЫ ВСЕ БЫЛИ В РАСЧЕТЕ:
-                </span>
-
-                <div className="settlement-card-list">
-                  {activeSettlements.settlements.length === 0 ? (
-                    <p style={{ color: '#9a9a9a', fontStyle: 'italic', padding: '8px 0' }}>
-                      Все скинулись ровно, долгов нет!
-                    </p>
-                  ) : (
-                    activeSettlements.settlements.map((s, idx) => (
-                      <div className="settlement-row-card" key={idx}>
-                        <div className="settlement-names">
-                          <strong style={{ fontWeight: 400 }}>{s.from}</strong>
-                          <span className="arrow">→</span>
-                          <strong style={{ fontWeight: 400 }}>{s.to}</strong>
+                  <div className="friends-clean-list">
+                    {activeTabTrip.members.map((member) => (
+                      <div className="friend-clean-row" key={member.name}>
+                        <div
+                          className="friend-clean-badge"
+                          style={{
+                            backgroundColor: `${member.color}22`,
+                            borderColor: member.color,
+                          }}
+                        >
+                          {member.initials}
                         </div>
-                        <strong className="settlement-cash">{formatRubles(s.amount)}</strong>
+                        <div className="friend-clean-info">
+                          <div className="friend-clean-name">
+                            {member.name}
+                            <span style={{ color: member.color, fontSize: '14px', marginLeft: '8px', fontWeight: 200 }}>
+                              · {member.role}
+                            </span>
+                          </div>
+                          <div className="friend-clean-duty">{member.duty}</div>
+                        </div>
                       </div>
-                    ))
-                  )}
+                    ))}
+                  </div>
                 </div>
+                {/* Visual column: 3D campfire & tent constellation shines here */}
+                <div className="dala-visual-col" aria-hidden="true" />
+              </div>
+            </section>
+
+            {/* Section 03: Общий котел и честный сплит */}
+            <section id="split" className="dala-section" aria-labelledby="split-title">
+              <div className="dala-two-col">
+                <div className="dala-text-col">
+                  <span className="kicker-amber">03 · ЧЕСТНЫЙ СПЛИТ</span>
+                  <h2 id="split-title" className="heading-section">
+                    Расчет до копейки.<br />Без неловких пауз.
+                  </h2>
+                  <p className="body-muted">
+                    Сервис автоматически подсчитывает траты компании и находит оптимальную схему взаимозачетов с минимальным количеством переводов.
+                  </p>
+
+                  <div className="stats-clean-row">
+                    <div className="stat-clean-item">
+                      <span className="stat-clean-label">Общий бюджет</span>
+                      <span className="stat-clean-value">{formatRubles(activeTabTrip.budget)}</span>
+                    </div>
+                    <div className="stat-clean-item">
+                      <span className="stat-clean-label">Потрачено</span>
+                      <span className="stat-clean-value" style={{ color: 'var(--color-electric-iris)' }}>
+                        {formatRubles(activeSettlements.spent)}
+                      </span>
+                    </div>
+                    <div className="stat-clean-item">
+                      <span className="stat-clean-label">С каждого</span>
+                      <span className="stat-clean-value" style={{ color: 'var(--color-saffron-spark)' }}>
+                        {formatRubles(activeSettlements.perPerson)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 'var(--spacing-24)' }}>
+                    <span className="label-violet" style={{ marginBottom: '12px' }}>
+                      КТО КОМУ ПЕРЕВОДИТ, ЧТОБЫ ВСЕ БЫЛИ В РАСЧЕТЕ:
+                    </span>
+
+                    <div className="settlement-clean-list">
+                      {activeSettlements.settlements.length === 0 ? (
+                        <p style={{ color: 'var(--color-ash-gray)', fontStyle: 'italic', padding: '8px 0' }}>
+                          Все скинулись ровно, долгов нет!
+                        </p>
+                      ) : (
+                        activeSettlements.settlements.map((s, idx) => (
+                          <div className="settlement-clean-row" key={idx}>
+                            <div className="settlement-clean-names">
+                              <span>{s.from}</span>
+                              <span className="arrow">→</span>
+                              <span>{s.to}</span>
+                            </div>
+                            <span className="settlement-clean-amount">{formatRubles(s.amount)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* Visual column: 3D compass / split constellation shines here */}
+                <div className="dala-visual-col" aria-hidden="true" />
               </div>
             </section>
           </main>
@@ -429,7 +420,7 @@ export default function App() {
             <div className="modal-header">
               <div>
                 <span className="kicker-amber">НОВОЕ ПУТЕШЕСТВИЕ</span>
-                <h3 className="heading-subsection">Куда едем с друзьями?</h3>
+                <h3 className="heading-section" style={{ fontSize: '28px', marginBottom: 0 }}>Куда едем с друзьями?</h3>
               </div>
               <button
                 className="modal-close-btn"

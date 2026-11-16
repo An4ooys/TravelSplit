@@ -1,5 +1,4 @@
 import { useState, type MouseEvent } from 'react';
-import ConstellationCanvas from './ConstellationCanvas';
 import { calculateSettlements, formatRubles, type Trip, type Expense } from './trips';
 
 type Props = {
@@ -56,88 +55,95 @@ export default function TripPage({ trip, onBack, onUpdateTrip }: Props) {
         <span aria-hidden="true">←</span> Все поездки
       </a>
 
-      {/* Hero Block */}
+      {/* Hero Block — Floating directly on void canvas */}
       <div style={{ marginBottom: 'var(--spacing-36)' }}>
-        <span className="kicker-amber">ПУТЕШЕСТВИЕ С ДРУЗЬЯМИ</span>
-        <h1 className="hero-headline" style={{ marginBottom: '12px' }}>{currentTrip.place}</h1>
-        <p className="body-light" style={{ fontSize: '20px', color: '#ffffff' }}>
+        <span className="kicker-amber">ЭКСПЕДИЦИЯ С ДРУЗЬЯМИ</span>
+        <h1 className="heading-display" style={{ marginBottom: '16px' }}>
+          {currentTrip.place}
+        </h1>
+        <p className="body-airy" style={{ marginBottom: 'var(--spacing-24)' }}>
           {currentTrip.destination} · {currentTrip.dates} · {currentTrip.duration}
         </p>
       </div>
 
-      {/* Block 1: Маршрут и созвездие гор */}
-      <section className="content-island" aria-labelledby="island-route-heading">
-        <div className="content-island-header">
-          <div>
-            <span className="kicker-amber" style={{ marginBottom: '4px' }}>БЛОК 01</span>
-            <h2 id="island-route-heading" className="heading-subsection">О поездке и маршруте</h2>
-          </div>
-          <span style={{ color: '#ffb829', fontSize: '14px', letterSpacing: '0.35px' }}>
-            ✦ {currentTrip.nextWhen}
-          </span>
+      {/* Block 01: О поездке и маршруте */}
+      <section className="trip-detail-section" aria-labelledby="section-route-heading">
+        <span className="kicker-amber">БЛОК 01 · МАРШРУТ</span>
+        <h2 id="section-route-heading" className="heading-section">
+          О маршруте
+        </h2>
+
+        <p className="body-airy" style={{ marginBottom: 'var(--spacing-24)' }}>
+          {currentTrip.description}
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px', color: 'var(--color-saffron-spark)', marginBottom: 'var(--spacing-24)' }}>
+          <span>✦ СЛЕДУЮЩИЙ ШАГ:</span>
+          <strong style={{ color: 'var(--color-bone-white)', fontWeight: 400 }}>
+            {currentTrip.next} ({currentTrip.nextWhen})
+          </strong>
         </div>
 
-        <div className="section-two-col" style={{ margin: 0, alignItems: 'center' }}>
-          <div>
-            <p className="body-light" style={{ fontSize: '18px', color: '#ffffff', marginBottom: '24px' }}>
-              {currentTrip.description}
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '18px' }}>
-              <div className="split-stat-box">
-                <span className="split-stat-title">СЛЕДУЮЩАЯ ТОЧКА</span>
-                <div style={{ color: '#ffffff', fontSize: '16px', fontWeight: 400 }}>{currentTrip.next}</div>
-              </div>
-              <div className="split-stat-box">
-                <span className="split-stat-title">ВРЕМЯ В ПУТИ</span>
-                <div style={{ color: '#ffffff', fontSize: '16px', fontWeight: 400 }}>{currentTrip.duration}</div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ height: '280px', borderRadius: '20px', overflow: 'hidden', background: '#000000', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <ConstellationCanvas preset="mountains" />
-          </div>
+        <div
+          style={{
+            height: '280px',
+            borderRadius: 'var(--radius-cards)',
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.1)',
+            marginBottom: 'var(--spacing-24)',
+          }}
+        >
+          <img
+            src={currentTrip.image}
+            alt={`Пейзаж: ${currentTrip.place}`}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         </div>
       </section>
 
-      {/* Block 2: Друзья в поездке (теплая дружеская компания) */}
-      <section className="content-island" aria-labelledby="island-friends-heading">
-        <div className="content-island-header">
-          <div>
-            <span className="kicker-amber" style={{ marginBottom: '4px' }}>БЛОК 02</span>
-            <h2 id="island-friends-heading" className="heading-subsection">
-              Наша компания ({currentTrip.members.length} чел)
-            </h2>
-          </div>
-          <span style={{ color: '#9a9a9a', fontSize: '14px' }}>
-            Все роли распределены по-дружески
-          </span>
-        </div>
+      {/* Block 02: Наша компания */}
+      <section className="trip-detail-section" aria-labelledby="section-friends-heading">
+        <span className="kicker-amber">БЛОК 02 · ДРУЗЬЯ В ПУТИ</span>
+        <h2 id="section-friends-heading" className="heading-section">
+          Наша компания ({currentTrip.members.length} чел)
+        </h2>
+        <p className="body-muted">
+          Роли и снаряжение распределены по-дружески.
+        </p>
 
-        <div className="friends-grid">
+        <div className="friends-clean-list">
           {currentTrip.members.map((member) => (
-            <div className="friend-card" key={member.name}>
-              <div className="friend-badge" style={{ backgroundColor: `${member.color}22`, borderColor: member.color }}>
+            <div className="friend-clean-row" key={member.name}>
+              <div
+                className="friend-clean-badge"
+                style={{
+                  backgroundColor: `${member.color}22`,
+                  borderColor: member.color,
+                }}
+              >
                 {member.initials}
               </div>
-              <h3 className="friend-name">{member.name}</h3>
-              <span className="friend-role" style={{ color: member.color }}>{member.role}</span>
-              <p className="friend-duty">{member.duty}</p>
+              <div className="friend-clean-info">
+                <div className="friend-clean-name">
+                  {member.name}
+                  <span style={{ color: member.color, fontSize: '14px', marginLeft: '8px', fontWeight: 200 }}>
+                    · {member.role}
+                  </span>
+                </div>
+                <div className="friend-clean-duty">{member.duty}</div>
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Block 3: Общий котел и честный сплит */}
-      <section className="content-island" aria-labelledby="island-split-heading">
-        <div className="content-island-header">
-          <div>
-            <span className="kicker-amber" style={{ marginBottom: '4px' }}>БЛОК 03</span>
-            <h2 id="island-split-heading" className="heading-subsection">
-              Общий котел и расчеты
-            </h2>
-          </div>
+      {/* Block 03: Общий котел и честный сплит */}
+      <section className="trip-detail-section" aria-labelledby="section-split-heading">
+        <span className="kicker-amber">БЛОК 03 · ЧЕСТНЫЙ СПЛИТ</span>
+        <div className="trip-detail-section-header">
+          <h2 id="section-split-heading" className="heading-section" style={{ marginBottom: 0 }}>
+            Общий котел
+          </h2>
           <button
             className="btn-primary"
             onClick={() => setIsExpenseModalOpen(true)}
@@ -147,47 +153,63 @@ export default function TripPage({ trip, onBack, onUpdateTrip }: Props) {
           </button>
         </div>
 
-        {/* 3 summary stats */}
-        <div className="split-summary-grid">
-          <div className="split-stat-box">
-            <span className="split-stat-title">ОБЩИЙ БЮДЖЕТ</span>
-            <div className="split-stat-num">{formatRubles(currentTrip.budget)}</div>
+        {/* 4 summary stats floating cleanly */}
+        <div className="stats-clean-row">
+          <div className="stat-clean-item">
+            <span className="stat-clean-label">Общий бюджет</span>
+            <span className="stat-clean-value">{formatRubles(currentTrip.budget)}</span>
           </div>
-          <div className="split-stat-box">
-            <span className="split-stat-title">ПОТРАЧЕНО ВСЕГО</span>
-            <div className="split-stat-num" style={{ color: '#8052ff' }}>{formatRubles(spent)}</div>
+          <div className="stat-clean-item">
+            <span className="stat-clean-label">Потрачено</span>
+            <span className="stat-clean-value" style={{ color: 'var(--color-electric-iris)' }}>
+              {formatRubles(spent)}
+            </span>
           </div>
-          <div className="split-stat-box">
-            <span className="split-stat-title">С КАЖДОГО ПОРОВНУ</span>
-            <div className="split-stat-num" style={{ color: '#ffb829' }}>{formatRubles(perPerson)}</div>
+          <div className="stat-clean-item">
+            <span className="stat-clean-label">Остаток</span>
+            <span className="stat-clean-value" style={{ color: remaining >= 0 ? '#34d399' : 'var(--color-saffron-spark)' }}>
+              {formatRubles(remaining)}
+            </span>
+          </div>
+          <div className="stat-clean-item">
+            <span className="stat-clean-label">С каждого</span>
+            <span className="stat-clean-value" style={{ color: 'var(--color-saffron-spark)' }}>
+              {formatRubles(perPerson)}
+            </span>
           </div>
         </div>
 
         {/* Budget progress bar */}
-        <div className="budget-meter-track" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
-          <div className="budget-meter-fill" style={{ width: `${progressPercent}%` }} />
+        <div
+          className="budget-bar-track"
+          role="progressbar"
+          aria-valuenow={progressPercent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div className="budget-bar-fill" style={{ width: `${progressPercent}%` }} />
         </div>
 
         {/* Minimal transfers */}
         <div style={{ marginTop: 'var(--spacing-24)' }}>
           <span className="label-violet" style={{ marginBottom: '12px' }}>
-            КАК ЗАКРЫТЬ ДОЛГИ МЕЖДУ ДРУЗЬЯМИ (МИНИМУМ ПЕРЕВОДОВ):
+            МИНИМУМ ПЕРЕВОДОВ ДЛЯ ПОЛНОГО РАСЧЕТА:
           </span>
 
-          <div className="settlement-card-list">
+          <div className="settlement-clean-list">
             {settlements.length === 0 ? (
-              <p style={{ color: '#9a9a9a', fontStyle: 'italic', padding: '8px 0' }}>
+              <p style={{ color: 'var(--color-ash-gray)', fontStyle: 'italic', padding: '8px 0' }}>
                 Все скинулись ровно, никто никому ничего не должен!
               </p>
             ) : (
               settlements.map((s, idx) => (
-                <div className="settlement-row-card" key={idx}>
-                  <div className="settlement-names">
-                    <strong style={{ fontWeight: 400 }}>{s.from}</strong>
+                <div className="settlement-clean-row" key={idx}>
+                  <div className="settlement-clean-names">
+                    <span>{s.from}</span>
                     <span className="arrow">→</span>
-                    <strong style={{ fontWeight: 400 }}>{s.to}</strong>
+                    <span>{s.to}</span>
                   </div>
-                  <strong className="settlement-cash">{formatRubles(s.amount)}</strong>
+                  <span className="settlement-clean-amount">{formatRubles(s.amount)}</span>
                 </div>
               ))
             )}
@@ -195,30 +217,23 @@ export default function TripPage({ trip, onBack, onUpdateTrip }: Props) {
         </div>
       </section>
 
-      {/* Block 4: Лента трат */}
-      <section className="content-island" aria-labelledby="island-expenses-heading">
-        <div className="content-island-header">
-          <div>
-            <span className="kicker-amber" style={{ marginBottom: '4px' }}>БЛОК 04</span>
-            <h2 id="island-expenses-heading" className="heading-subsection">
-              Все расходы в поездке ({currentTrip.expenses.length})
-            </h2>
-          </div>
-          <span style={{ color: '#9a9a9a', fontSize: '14px' }}>
-            Остаток бюджета: <strong style={{ color: remaining >= 0 ? '#ffffff' : '#ffb829' }}>{formatRubles(remaining)}</strong>
-          </span>
-        </div>
+      {/* Block 04: Лента расходов */}
+      <section className="trip-detail-section" aria-labelledby="section-expenses-heading">
+        <span className="kicker-amber">БЛОК 04 · ЛЕНТА ТРАТ</span>
+        <h2 id="section-expenses-heading" className="heading-section">
+          Все расходы ({currentTrip.expenses.length})
+        </h2>
 
-        <div>
+        <div className="expense-clean-list">
           {currentTrip.expenses.map((expense) => (
-            <div className="expense-row-item" key={expense.id}>
-              <div className="expense-left-meta">
-                <span className="expense-title-text">{expense.title}</span>
-                <span className="expense-author-tag">
+            <div className="expense-clean-row" key={expense.id}>
+              <div className="expense-clean-info">
+                <span className="expense-clean-title">{expense.title}</span>
+                <span className="expense-clean-meta">
                   {expense.date} · оплатил(а) <strong>{expense.paidBy}</strong> · категория: {expense.category}
                 </span>
               </div>
-              <strong className="expense-cost-val">{formatRubles(expense.amount)}</strong>
+              <strong className="expense-clean-amount">{formatRubles(expense.amount)}</strong>
             </div>
           ))}
         </div>
@@ -231,7 +246,9 @@ export default function TripPage({ trip, onBack, onUpdateTrip }: Props) {
             <div className="modal-header">
               <div>
                 <span className="kicker-amber">НОВАЯ ТРАТА</span>
-                <h3 className="heading-subsection">Скинулись на что-то</h3>
+                <h3 className="heading-section" style={{ fontSize: '28px', marginBottom: 0 }}>
+                  Скинулись на что-то
+                </h3>
               </div>
               <button
                 className="modal-close-btn"
