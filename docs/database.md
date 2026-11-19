@@ -173,7 +173,7 @@ erDiagram
 
 ## Локальный запуск через Docker Compose
 
-Запуск базы данных с автоматическим накатом схемы и демо-данных:
+Запуск чистой базы данных с автоматическим накатом схемы:
 
 ```bash
 docker compose up -d
@@ -217,4 +217,3 @@ docker compose down -v
 ## Расположение миграций
 
 - DDL-схема: `backend/database/schema.sql` и `backend/src/main/resources/db/migration/V1__init_schema.sql`
-- Тестовые данные: `backend/database/seed.sql` и `backend/src/main/resources/db/migration/V2__seed_demo_data.sql`
