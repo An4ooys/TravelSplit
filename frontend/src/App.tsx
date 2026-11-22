@@ -1,168 +1,132 @@
-import { useEffect, useState, type MouseEvent } from 'react';
-import ThemeArc, { times, type TimeOfDay } from './ThemeArc';
-import TripPage from './TripPage';
-import Appearance, { landscapes, fonts } from './Appearance';
-import Scenery from './Scenery';
-
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
+import Appearance, { fonts } from './Appearance';
+import JournalTrip from './JournalTrip';
 import { trips } from './trips';
-
-function initialTime(): TimeOfDay {
-  const saved = window.localStorage.getItem('travelsplit-time');
-  if (times.some((time) => time === saved)) return saved as TimeOfDay;
-  const configured = import.meta.env.VITE_DEFAULT_TIME;
-  return times.some((time) => time === configured) ? configured as TimeOfDay : 'morning';
-}
-
-function tripIdFromPath() {
-  const match = window.location.pathname.match(/^\/trips\/([a-z0-9-]+)\/?$/);
-  return match && trips.some((trip) => trip.id === match[1]) ? match[1] : null;
-}
-
-function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
-  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-}
+import { colorVariables, loadColors, palettes, type ThemeColors } from './colors';
+import { DecorativeBackground, MountainDivider, loadBackground } from './BackgroundArtwork';
+import useMountainNavigation from './useMountainNavigation';
 
 export default function App() {
-  const [landscape, setLandscape] = useState(() => {
-    const saved = localStorage.getItem('travelsplit-landscape') || import.meta.env.VITE_DEFAULT_BACKGROUND;
-    return landscapes.some((item) => item.id === saved) ? saved : 'mist';
+  const [featured, setFeatured] = useState(0);
+  const [dark, setDark] = useState(() => localStorage.getItem('travelsplit-editorial-theme') === 'dark');
+  const [settings, setSettings] = useState(false);
+  const [colors, setColors] = useState(loadColors);
+  const colorMode = dark ? 'dark' : 'light';
+
+  function changeColors(next: ThemeColors) {
+    setColors(previous => ({ ...previous, [colorMode]: next }));
+  }
+  const [font, setFont] = useState(() => {
+    const saved = localStorage.getItem('travelsplit-editorial-font');
+    return fonts.some(item => item.id === saved) ? saved! : 'sans';
   });
-  const [font, setFont] = useState(() => localStorage.getItem('travelsplit-font') || 'sans');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [displayFont, setDisplayFont] = useState(() => {
+    const saved = localStorage.getItem('travelsplit-editorial-display-font');
+    return fonts.some(item => item.id === saved) ? saved! : 'editorial';
+  });
   const [motion, setMotion] = useState(() => localStorage.getItem('travelsplit-motion') !== 'off');
+  const [decoration, setDecoration] = useState(loadBackground);
+  const { tripId, navigate, transitioning } = useMountainNavigation(motion);
+  const heading = useRef<HTMLElement>(null);
+  const trip = trips.find(item => item.id === tripId);
+  const nextTrip = trips[featured];
+
   useEffect(() => {
-    localStorage.setItem('travelsplit-landscape', landscape);
-    localStorage.setItem('travelsplit-font', font);
+    localStorage.setItem('travelsplit-editorial-theme', dark ? 'dark' : 'light');
+    localStorage.setItem('travelsplit-editorial-font', font);
+    localStorage.setItem('travelsplit-editorial-display-font', displayFont);
     localStorage.setItem('travelsplit-motion', motion ? 'on' : 'off');
-  }, [landscape, font, motion]);
-  const [time, setTime] = useState<TimeOfDay>(initialTime);
-  const [selectedTripId, setSelectedTripId] = useState<string | null>(tripIdFromPath);
-  const selectedTrip = trips.find((trip) => trip.id === selectedTripId);
-  const featuredTrip = trips[0];
+    localStorage.setItem('travelsplit-editorial-colors', JSON.stringify(colors));
+    localStorage.setItem('travelsplit-background-elements', JSON.stringify(decoration));
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  }, [dark, font, displayFont, motion, colors, decoration]);
 
   useEffect(() => {
-    window.localStorage.setItem('travelsplit-time', time);
-    document.documentElement.dataset.theme = time;
-  }, [time]);
+    document.title = trip ? `${trip.place} · TravelSplit` : 'TravelSplit · Искусство путешествовать вместе';
+    heading.current?.focus({ preventScroll: true });
+  }, [trip]);
 
-  useEffect(() => {
-    const syncLocation = () => setSelectedTripId(tripIdFromPath());
-    window.addEventListener('popstate', syncLocation);
-    return () => window.removeEventListener('popstate', syncLocation);
-  }, []);
-
-  useEffect(() => {
-    document.title = selectedTrip ? `${selectedTrip.place} — TravelSplit` : 'TravelSplit — мои поездки';
-  }, [selectedTrip]);
-
-  function openTrip(event: MouseEvent<HTMLAnchorElement>, id: string) {
-    if (!isPlainClick(event)) return;
+  function follow(event: MouseEvent<HTMLAnchorElement>, id: string | null) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    window.history.pushState(null, '', `/trips/${id}`);
-    setSelectedTripId(id);
-    window.scrollTo(0, 0);
+    navigate(id);
   }
 
-  function closeTrip(event: MouseEvent<HTMLAnchorElement>) {
-    if (!isPlainClick(event)) return;
-    event.preventDefault();
-    window.history.pushState(null, '', '/');
-    setSelectedTripId(null);
-    window.scrollTo(0, 0);
-  }
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target;
+      if (settings || (target instanceof HTMLElement && target.closest('button, a, input, select, textarea, [role="tab"]'))) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key === 'Escape' && tripId) navigate(null);
+      if (!tripId && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+        event.preventDefault();
+        const offset = event.key === 'ArrowRight' ? 1 : -1;
+        setFeatured(index => (index + offset + trips.length) % trips.length);
+      }
+      if (!tripId && event.key === 'Enter') navigate(trips[featured].id);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [featured, tripId, settings, navigate]);
 
   return (
-    <div className={`app-shell theme-${time} landscape-${landscape} ${motion ? '' : 'motion-paused'}`} style={{ fontFamily: fonts.find((item) => item.id === font)?.family || fonts[0].family }}>
-      <Scenery landscape={landscape} time={time} motion={motion} />
-      {settingsOpen && <Appearance landscape={landscape} font={font} motion={motion} onLandscape={setLandscape} onFont={setFont} onMotion={() => setMotion(!motion)} onClose={() => setSettingsOpen(false)} />}
-      <div className="page-frame">
-        <header className="site-header">
-          <div className="wordmark" aria-label={import.meta.env.VITE_APP_TITLE || 'TravelSplit'}>
-            <span className="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 36 36" fill="none">
-                <path d="M4 26.5 13.5 13l5.5 7 4.3-5.2L32 26.5H4Z" stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round" />
-                <path d="M13.5 13 16 16.2l2.3-1.1" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
-            <span>{import.meta.env.VITE_APP_TITLE || 'TravelSplit'}</span>
-          </div>
-          <ThemeArc value={time} onChange={setTime} />
-          <div className="header-actions"><button className="appearance-trigger" onClick={() => setSettingsOpen(true)}><span aria-hidden="true">◉</span> Оформление</button><div className="profile" aria-label="Демо-профиль Анны">
-            <span className="profile-name">Анна</span>
-            <span className="profile-avatar" aria-hidden="true">А</span>
-          </div></div>
-        </header>
+    <div className={`atelier ${dark ? 'is-dark' : ''} ${motion ? '' : 'is-still'}`} style={{ ...colorVariables(colors[colorMode]), fontFamily: fonts.find(item => item.id === font)?.family, '--heading-font': fonts.find(item => item.id === displayFont)?.family } as CSSProperties}>
+      <DecorativeBackground settings={decoration} dark={dark} motion={motion} />
+      <a className="skip-link" href="#content">К содержимому</a>
+      <header className="masthead">
+        <a href="/" className="brand" onClick={event => follow(event, null)} aria-label="TravelSplit — главная">travel<span>split</span><i aria-hidden="true">✳</i></a>
+        <nav aria-label="Главная навигация">
+          <a href="/#journeys" onClick={event => { if (tripId) follow(event, null); }}>Мои путешествия</a>
+          <button onClick={() => setSettings(true)}>Атмосфера <span aria-hidden="true">↗</span></button>
+        </nav>
+        <div className="masthead-actions">
+          <button className="day-switch" aria-label={dark ? 'Включить светлую тему' : 'Включить тёмную тему'} aria-pressed={dark} onClick={() => setDark(!dark)}>
+            <span className="switch-sun" aria-hidden="true">☀</span><span className="switch-moon" aria-hidden="true">☾</span><span className="switch-knob" />
+          </button>
+          <span className="user-avatar" title="Анна">А</span>
+        </div>
+      </header>
 
-        {selectedTrip ? (
-          <TripPage key={selectedTrip.id} trip={selectedTrip} onBack={closeTrip} />
-        ) : (
-        <main className="home-content" key="home">
-          <div className="intro">
-            <p className="eyebrow">TRAVELSPLIT / ВАШИ ПУТЕШЕСТВИЯ</p>
-            <h1>Ближе к миру.<br /><em>Ближе друг к другу.</em></h1>
-            <p className="intro-subtitle">С возвращением, Анна. Куда отправимся вместе?</p>
-          </div>
-
-          <section className="trip-section" aria-labelledby="trip-section-heading">
-            <div className="section-heading">
-              <h2 id="trip-section-heading">Мои поездки</h2>
-              <span>3 путешествия</span>
+      <main id="content" ref={heading} tabIndex={-1} key={tripId || 'home'} className="page-enter" aria-busy={transitioning}>
+        {trip ? <JournalTrip trip={trip} onBack={event => follow(event, null)} /> : <>
+          <section className="cover">
+            <div className="cover-copy">
+              <p className="eyebrow">ВАШ ЛИЧНЫЙ АТЛАС ПУТЕШЕСТВИЙ</p>
+              <h1>Весь мир.<br />Ваша <em>компания.</em></h1>
+              <p className="welcome">С возвращением, Анна.</p>
+              <p className="cover-description">Маршруты, общие планы и маленькие открытия.<br />Всё, что делает поездку вашей.</p>
+              <a className="button button-wine" href={`/trips/${nextTrip.id}`} onClick={event => follow(event, nextTrip.id)}>Открыть путешествие <span aria-hidden="true">↗</span></a>
+              <div className="cover-bottom"><span className="compass" aria-hidden="true">✳</span><span>Больше моментов.<br />Меньше суеты.</span><a href="#journeys" className="text-link">Все поездки <span aria-hidden="true">↓</span></a></div>
             </div>
-
-            <a className="featured-trip trip-link" href={`/trips/${featuredTrip.id}`} onClick={(event) => openTrip(event, featuredTrip.id)} aria-label={`Открыть поездку: ${featuredTrip.place}`}>
-              <div className="featured-image-wrap">
-                <img src={featuredTrip.image} alt="Горная тропа и палатка на Алтае" />
-                <span className="image-caption">Ближайшая поездка</span>
-              </div>
-              <div className="featured-copy">
-                <div className="featured-topline">
-                  <span className="trip-kicker">БЛИЖАЙШЕЕ ПУТЕШЕСТВИЕ</span>
-                  <span className="trip-dates">{featuredTrip.dates}</span>
-                </div>
-                <h3>{featuredTrip.place}</h3>
-                <div className="traveler-row">
-                  <div className="avatar-stack" aria-label={`${featuredTrip.members.length} участника поездки`}>
-                    {featuredTrip.members.map((member, index) => (
-                      <span className={`traveler traveler-${index}`} key={member.username}>{member.initials}</span>
-                    ))}
-                  </div>
-                  <span>Вместе с друзьями</span>
-                </div>
-                <div className="next-plan">
-                  <span className="next-icon" aria-hidden="true">✦</span>
-                  <div>
-                    <span className="next-label">СЛЕДУЮЩЕЕ В ПЛАНЕ</span>
-                    <strong>{featuredTrip.next}</strong>
-                    <span>{featuredTrip.nextWhen}</span>
-                  </div>
-                </div>
-              </div>
-            </a>
-
-            <div className="other-trips" aria-label="Другие поездки">
-              {trips.slice(1).map((trip) => (
-                <a className="small-trip trip-link" href={`/trips/${trip.id}`} onClick={(event) => openTrip(event, trip.id)} key={trip.id} aria-label={`Открыть поездку: ${trip.place}`}>
-                  <img src={trip.image} alt={`Пейзаж поездки: ${trip.place}`} />
-                  <div>
-                    <h3>{trip.place}</h3>
-                    <p>{trip.dates}</p>
-                  </div>
-                </a>
-              ))}
-              <button className="future-note" onClick={() => setSettingsOpen(true)} aria-label="Выбрать настроение путешествия">
-                <span className="future-symbol" aria-hidden="true">＋</span>
-                <span>Выбрать пейзаж<br />для новых планов</span>
-              </button>
+            <div className="cover-art">
+              <div className="cover-color-square" aria-hidden="true" />
+              <div className="cover-secondary-square" aria-hidden="true" />
+              <div className="trip-ticket" aria-live="polite"><p>СЛЕДУЮЩАЯ ГЛАВА</p><h2>{nextTrip.place}</h2><span>{nextTrip.dates}</span><a href={`/trips/${nextTrip.id}`} onClick={event => follow(event, nextTrip.id)} aria-label={`Открыть поездку ${nextTrip.place}`}>↗</a></div>
+              <div className="photo-controls"><span>{featured + 1} <i>/ {trips.length}</i></span><div><button className="circle-button" onClick={() => setFeatured((featured + trips.length - 1) % trips.length)} aria-label="Предыдущая поездка">←</button><button className="circle-button" onClick={() => setFeatured((featured + 1) % trips.length)} aria-label="Следующая поездка">→</button></div></div>
             </div>
           </section>
-        </main>
-        )}
 
-        <footer className="site-footer">
-          <span>Планы, которые хочется воплотить.</span>
-          <button className="landscape-caption" onClick={() => setSettingsOpen(true)}>{landscapes.find((item) => item.id === landscape)?.name} <span aria-hidden="true">↗</span></button>
-        </footer>
-      </div>
+          <section className="journeys mountain-divider" id="journeys" aria-labelledby="journeys-title">
+            <MountainDivider />
+            <div className="section-title"><div><p className="eyebrow">СОБИРАЙТЕ ВПЕЧАТЛЕНИЯ</p><h2 id="journeys-title">Ваши <em>путешествия</em></h2></div><span className="collection-count">{trips.length} поездки в коллекции</span></div>
+            <div className="journey-grid">{trips.map(item => <a className="journey-card" href={`/trips/${item.id}`} onClick={event => follow(event, item.id)} key={item.id}>
+              <div className="journey-image solid-cover"><span className="journey-open" aria-hidden="true">↗</span><span className="duration">{item.duration}</span></div>
+              <div className="journey-caption"><div><p>{item.dates}</p><h3>{item.place}</h3></div><span className="member-count">{item.members.length} участника</span></div>
+            </a>)}</div>
+            <div className="collection-note"><span aria-hidden="true">✳</span><p>Лучшие истории начинаются<br /><em>с общего плана.</em></p><button className="button button-outline" onClick={() => setSettings(true)}>Выбрать атмосферу <span aria-hidden="true">↗</span></button></div>
+          </section>
+        </>}
+      </main>
+
+      <footer className="footer"><a href="/" className="footer-brand" onClick={event => follow(event, null)}>TravelSplit</a><p>Путешествовать. Вместе.</p><span>Сделано для ваших историй</span></footer>
+      <div className={`mountain-transition ${transitioning ? 'is-crossing' : ''}`} aria-hidden="true"><svg viewBox="0 0 1000 700" preserveAspectRatio="none"><path d="M0 140L110 80L185 117L310 0L405 100L520 35L610 120L735 10L820 110L930 55L1000 135V700H0Z" /></svg></div>
+      {settings && <Appearance decoration={decoration} onDecoration={setDecoration} colors={colors[colorMode]} dark={dark} onColors={changeColors} onPalette={id => {
+        const preset = palettes.find(item => item.id === id)!;
+        setColors(previous => ({ light: { ...previous.light, accent: preset.light.accent }, dark: { ...previous.dark, accent: preset.dark.accent } }));
+      }} onBackgroundPalette={id => {
+        const preset = palettes.find(item => item.id === id)!;
+        setColors(previous => ({ light: { ...previous.light, background: preset.light.background }, dark: { ...previous.dark, background: preset.dark.background } }));
+      }} font={font} displayFont={displayFont} motion={motion} onFont={setFont} onDisplayFont={setDisplayFont} onMotion={() => setMotion(!motion)} onClose={() => setSettings(false)} />}
     </div>
   );
 }
