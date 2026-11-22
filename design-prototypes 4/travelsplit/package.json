@@ -1,0 +1,14 @@
+{
+  "name": "travelsplit-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Responsive bilingual travel application frontend and PWA",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check dist/app.js && node --check dist/atlas.js && node --check dist/collaboration.js && node --check dist/store.js && node --check dist/sw.js",
+    "test": "node checks/atlas-check.cjs && node checks/collaboration-check.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
