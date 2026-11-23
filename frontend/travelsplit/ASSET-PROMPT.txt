@@ -1,0 +1,4 @@
+Mode: built-in image_gen; transparent_background: true
+Asset: dist/assets/living-botanical.png
+
+Use case: stylized-concept. Asset type: transparent botanical sculpture for a travel app hero. Primary request: a single floating curved piece of dark weathered driftwood and porous volcanic rock, lush fine vivid moss, tiny fresh fern leaves, a few clear quartz crystals and one delicate pink blossom twig growing from it. Photoreal luxury nature CGI, tactile tiny details, soft daylight, muted forest green with small pink accents. Composition: isolated compact diagonal crescent, entire subject visible with generous transparent padding, three-quarter view, no ground, no scene background. Genuine transparent background, no text, no logo, no border, no cast shadow outside the object. Intended to float over a translucent forest-green interface.
