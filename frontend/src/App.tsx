@@ -1,10 +1,18 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import ThemeArc, { times, type TimeOfDay } from './ThemeArc';
 import TripPage from './TripPage';
 import Appearance, { landscapes, fonts } from './Appearance';
 import Scenery from './Scenery';
+import NotificationBell from './components/NotificationBell';
+import NotificationSettingsModal from './components/NotificationSettingsModal';
 
 import { trips } from './trips';
+import { DEMO_USERS } from './types/notification';
+
+function initialUser(): string {
+  const saved = window.localStorage.getItem('travelsplit-user');
+  return saved && saved in DEMO_USERS ? saved : 'anna';
+}
 
 function initialTime(): TimeOfDay {
   const saved = window.localStorage.getItem('travelsplit-time');
@@ -37,8 +45,45 @@ export default function App() {
   }, [landscape, font, motion]);
   const [time, setTime] = useState<TimeOfDay>(initialTime);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(tripIdFromPath);
+  const [focusedTarget, setFocusedTarget] = useState<{ targetType: string; targetId: string; seq: number } | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string>(initialUser);
+  const [notificationSettingsTripId, setNotificationSettingsTripId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
   const selectedTrip = trips.find((trip) => trip.id === selectedTripId);
   const featuredTrip = trips[0];
+  const currentUserName = DEMO_USERS[currentUserId] || 'Анна';
+
+  useEffect(() => {
+    window.localStorage.setItem('travelsplit-user', currentUserId);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 4000);
+  };
+
+  const handleNavigateToSection = (targetType: string, targetId: string, tripId?: string) => {
+    const resolvedTripId = tripId && trips.some((t) => t.id === tripId) ? tripId : trips[0].id;
+    window.history.pushState(null, '', `/trips/${resolvedTripId}`);
+    setSelectedTripId(resolvedTripId);
+    setFocusedTarget({ targetType, targetId, seq: Date.now() });
+  };
 
   useEffect(() => {
     window.localStorage.setItem('travelsplit-time', time);
@@ -59,6 +104,7 @@ export default function App() {
     if (!isPlainClick(event)) return;
     event.preventDefault();
     window.history.pushState(null, '', `/trips/${id}`);
+    setFocusedTarget(null);
     setSelectedTripId(id);
     window.scrollTo(0, 0);
   }
@@ -87,20 +133,52 @@ export default function App() {
             <span>{import.meta.env.VITE_APP_TITLE || 'TravelSplit'}</span>
           </div>
           <ThemeArc value={time} onChange={setTime} />
-          <div className="header-actions"><button className="appearance-trigger" onClick={() => setSettingsOpen(true)}><span aria-hidden="true">◉</span> Оформление</button><div className="profile" aria-label="Демо-профиль Анны">
-            <span className="profile-name">Анна</span>
-            <span className="profile-avatar" aria-hidden="true">А</span>
-          </div></div>
+          <div className="header-actions">
+            <select
+              className="user-switcher-select"
+              value={currentUserId}
+              onChange={(e) => setCurrentUserId(e.target.value)}
+              aria-label="Выбрать текущего пользователя"
+            >
+              {Object.entries(DEMO_USERS).map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+            <NotificationBell
+              currentUserId={currentUserId}
+              onNavigateToSection={handleNavigateToSection}
+              onToast={showToast}
+            />
+            <button className="appearance-trigger" onClick={() => setSettingsOpen(true)}>
+              <span aria-hidden="true">◉</span> Оформление
+            </button>
+            <div className="profile" aria-label={`Профиль ${currentUserId}`}>
+              <span className="profile-name">
+                {currentUserName}
+              </span>
+              <span className="profile-avatar" aria-hidden="true">
+                {currentUserName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          </div>
         </header>
 
         {selectedTrip ? (
-          <TripPage key={selectedTrip.id} trip={selectedTrip} onBack={closeTrip} />
+          <TripPage
+            key={selectedTrip.id}
+            trip={selectedTrip}
+            currentUserId={currentUserId}
+            focusedTarget={focusedTarget}
+            onBack={closeTrip}
+            onOpenSettings={() => setNotificationSettingsTripId(selectedTrip.id)}
+            onToast={showToast}
+          />
         ) : (
         <main className="home-content" key="home">
           <div className="intro">
             <p className="eyebrow">TRAVELSPLIT / ВАШИ ПУТЕШЕСТВИЯ</p>
             <h1>Ближе к миру.<br /><em>Ближе друг к другу.</em></h1>
-            <p className="intro-subtitle">С возвращением, Анна. Куда отправимся вместе?</p>
+            <p className="intro-subtitle">С возвращением, {currentUserName}. Куда отправимся вместе?</p>
           </div>
 
           <section className="trip-section" aria-labelledby="trip-section-heading">
@@ -162,6 +240,20 @@ export default function App() {
           <span>Планы, которые хочется воплотить.</span>
           <button className="landscape-caption" onClick={() => setSettingsOpen(true)}>{landscapes.find((item) => item.id === landscape)?.name} <span aria-hidden="true">↗</span></button>
         </footer>
+
+        <NotificationSettingsModal
+          isOpen={Boolean(notificationSettingsTripId)}
+          onClose={() => setNotificationSettingsTripId(null)}
+          tripId={notificationSettingsTripId || 'altai'}
+          currentUserId={currentUserId}
+        />
+
+        {toastMessage && (
+          <div className="toast-notification animate-slide-up">
+            <div className="toast-content">{toastMessage}</div>
+            <button type="button" className="toast-close" onClick={() => setToastMessage(null)}>✕</button>
+          </div>
+        )}
       </div>
     </div>
   );
