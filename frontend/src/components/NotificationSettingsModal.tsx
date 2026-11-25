@@ -51,6 +51,7 @@ export const NotificationSettingsModal: React.FC<Props> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageError, setMessageError] = useState<boolean>(false);
   const closeTimerRef = useRef<number | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -82,6 +83,7 @@ export const NotificationSettingsModal: React.FC<Props> = ({
     const seq = ++loadSeqRef.current;
     setLoading(true);
     setMessage(null);
+    setMessageError(false);
     try {
       const data = await fetchNotificationSettings(tripId, currentUserId);
       if (seq !== loadSeqRef.current || !isOpenRef.current) return;
@@ -90,6 +92,7 @@ export const NotificationSettingsModal: React.FC<Props> = ({
       if (seq !== loadSeqRef.current || !isOpenRef.current) return;
       console.error(err);
       setMessage('Ошибка загрузки настроек');
+      setMessageError(true);
     } finally {
       if (seq === loadSeqRef.current) {
         setLoading(false);
@@ -113,10 +116,12 @@ export const NotificationSettingsModal: React.FC<Props> = ({
     const seq = loadSeqRef.current;
     setSaving(true);
     setMessage(null);
+    setMessageError(false);
     try {
       await saveNotificationSettings(tripId, settings, currentUserId);
       if (seq !== loadSeqRef.current || !isOpenRef.current) return;
       setMessage('Настройки сохранены');
+      setMessageError(false);
       closeTimerRef.current = window.setTimeout(() => {
         closeTimerRef.current = null;
         if (isOpenRef.current) {
@@ -127,6 +132,7 @@ export const NotificationSettingsModal: React.FC<Props> = ({
       if (seq !== loadSeqRef.current || !isOpenRef.current) return;
       console.error(err);
       setMessage('Не удалось сохранить настройки');
+      setMessageError(true);
     } finally {
       setSaving(false);
     }
@@ -209,7 +215,9 @@ export const NotificationSettingsModal: React.FC<Props> = ({
             </div>
           )}
 
-          {message && <div className="status-banner">{message}</div>}
+          {message && (
+            <div className={`status-banner ${messageError ? 'error' : ''}`}>{message}</div>
+          )}
         </div>
 
         <div className="modal-footer">
