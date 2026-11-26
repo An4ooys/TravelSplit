@@ -3,3 +3,8 @@ frontend/dist/
 frontend/.env
 backend/.env
 frontend/.vite/
+backend/target/
+bot/.env
+bot/venv/
+bot/__pycache__/
+.DS_Store
