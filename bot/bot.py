@@ -101,6 +101,7 @@ bot = AsyncTeleBot(BOT_TOKEN or "0:missing", parse_mode="HTML")
 db_pool: Optional[asyncpg.Pool] = None
 http_session: Optional[aiohttp.ClientSession] = None
 notify_queue: Optional[asyncio.Queue[int]] = None
+pending_chat_actions: dict[int, dict[str, Any]] = {}
 
 
 def get_pool() -> asyncpg.Pool:
@@ -374,7 +375,9 @@ async def get_active_reminders(chat_id: int) -> list[dict[str, Any]]:
             """
             SELECT id, chat_id, user_id, title, description, remind_at, status, notification_id, snooze_count
             FROM telegram_reminders
-            WHERE chat_id = $1 AND status IN ('PENDING', 'SNOOZED', 'DELIVERED')
+            WHERE chat_id = $1
+              AND notification_id IS NULL
+              AND status IN ('PENDING', 'SNOOZED', 'DELIVERED')
             ORDER BY remind_at ASC
             LIMIT 50
             """,
@@ -419,6 +422,21 @@ async def mark_reminder_status(reminder_id: int, status: str) -> None:
         )
 
 
+async def get_unread_notifications_from_db(user_id: str) -> list[dict[str, Any]]:
+    async with get_pool().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, user_id, notification_type, title, message, delivered_at
+            FROM notifications
+            WHERE LOWER(user_id) = LOWER($1) AND is_read = FALSE
+            ORDER BY delivered_at DESC, id DESC
+            LIMIT 20
+            """,
+            user_id.strip().lower(),
+        )
+        return [dict(r) for r in rows]
+
+
 async def mark_notification_read_in_db(notif_id: int) -> None:
     async with get_pool().acquire() as conn:
         await conn.execute(
@@ -427,58 +445,45 @@ async def mark_notification_read_in_db(notif_id: int) -> None:
         )
 
 
+async def mark_all_notifications_read_in_db(user_id: str) -> None:
+    async with get_pool().acquire() as conn:
+        await conn.execute(
+            "UPDATE notifications SET is_read = TRUE WHERE LOWER(user_id) = LOWER($1) AND is_read = FALSE",
+            user_id.strip().lower(),
+        )
+
+
 async def try_claim_notification_delivery(
     chat_id: int,
-    user_id: str,
-    title: str,
-    description: Optional[str],
     now_dt: datetime,
     notif_id: Optional[int],
-) -> Optional[int]:
+) -> bool:
+    if notif_id is None:
+        return True
     async with get_pool().acquire() as conn:
-        async with conn.transaction():
-            if notif_id is not None:
-                claimed = await conn.fetchval(
-                    """
-                    INSERT INTO telegram_delivered_notifications (notification_id, chat_id, delivered_at)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (notification_id, chat_id) DO NOTHING
-                    RETURNING notification_id
-                    """,
-                    notif_id,
-                    chat_id,
-                    now_dt,
-                )
-                if claimed is None:
-                    return None
-
-            rem_id = await conn.fetchval(
-                """
-                INSERT INTO telegram_reminders
-                    (chat_id, user_id, title, description, remind_at, status, snooze_count, notification_id, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, 'DELIVERED', 0, $6, $5, $5)
-                RETURNING id
-                """,
-                chat_id,
-                user_id.strip().lower(),
-                title[:255],
-                description[:1000] if description else None,
-                now_dt,
-                notif_id,
-            )
-            return int(rem_id)
+        claimed = await conn.fetchval(
+            """
+            INSERT INTO telegram_delivered_notifications (notification_id, chat_id, delivered_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (notification_id, chat_id) DO NOTHING
+            RETURNING notification_id
+            """,
+            notif_id,
+            chat_id,
+            now_dt,
+        )
+        return claimed is not None
 
 
-async def unclaim_notification_delivery(chat_id: int, notif_id: Optional[int], rem_id: int) -> None:
+async def unclaim_notification_delivery(chat_id: int, notif_id: Optional[int]) -> None:
+    if notif_id is None:
+        return
     async with get_pool().acquire() as conn:
-        async with conn.transaction():
-            await conn.execute("DELETE FROM telegram_reminders WHERE id = $1", rem_id)
-            if notif_id is not None:
-                await conn.execute(
-                    "DELETE FROM telegram_delivered_notifications WHERE notification_id = $1 AND chat_id = $2",
-                    notif_id,
-                    chat_id,
-                )
+        await conn.execute(
+            "DELETE FROM telegram_delivered_notifications WHERE notification_id = $1 AND chat_id = $2",
+            notif_id,
+            chat_id,
+        )
 
 
 async def claim_due_reminders(now_dt: datetime) -> list[dict[str, Any]]:
@@ -600,17 +605,23 @@ async def fetch_upcoming_events_from_db(user_id: str) -> list[dict[str, Any]]:
 def main_menu_keyboard() -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🗺 Мои поездки", callback_data="nav_trips"),
-        types.InlineKeyboardButton("📋 Напоминания", callback_data="nav_reminders"),
+        types.InlineKeyboardButton("🔗 Аккаунт", callback_data="nav_link"),
+        types.InlineKeyboardButton("🗺 Поездки", callback_data="nav_trips"),
     )
     markup.add(
-        types.InlineKeyboardButton("🔗 Сменить профиль", callback_data="nav_link"),
-        types.InlineKeyboardButton("ℹ️ Справка", callback_data="nav_help"),
+        types.InlineKeyboardButton("🔔 Уведомления", callback_data="nav_notifications"),
+        types.InlineKeyboardButton("📋 Напоминания", callback_data="nav_reminders"),
     )
     return markup
 
 
-async def build_quick_link_keyboard() -> types.InlineKeyboardMarkup:
+def back_to_menu_keyboard() -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton("🏠 В главное меню", callback_data="nav_home"))
+    return markup
+
+
+async def build_quick_link_keyboard(include_home: bool = True) -> types.InlineKeyboardMarkup:
     profiles = await get_available_profiles()
     markup = types.InlineKeyboardMarkup(row_width=2)
     buttons = [
@@ -618,44 +629,90 @@ async def build_quick_link_keyboard() -> types.InlineKeyboardMarkup:
         for label, u_id in profiles
     ]
     markup.add(*buttons)
+    if include_home:
+        markup.row(types.InlineKeyboardButton("🏠 В главное меню", callback_data="nav_home"))
     return markup
 
 
-def quick_reminder_keyboard() -> types.InlineKeyboardMarkup:
+def notifications_menu_keyboard(items: list[dict[str, Any]]) -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for n in items[:8]:
+        short_title = (n.get("title") or "Уведомление")[:24]
+        markup.add(
+            types.InlineKeyboardButton(
+                f"✅ Прочитано: {short_title}",
+                callback_data=f"notif_read:{n['id']}",
+            )
+        )
+    if len(items) >= 2:
+        markup.add(types.InlineKeyboardButton("✅ Прочитать все", callback_data="notif_read_all"))
+    markup.add(types.InlineKeyboardButton("🏠 В главное меню", callback_data="nav_home"))
+    return markup
+
+
+def create_reminder_menu_keyboard() -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("⏱ 15 минут", callback_data="qrem:15"),
-        types.InlineKeyboardButton("🕐 1 час", callback_data="qrem:60"),
+        types.InlineKeyboardButton("⬅️ К напоминаниям", callback_data="nav_reminders"),
+        types.InlineKeyboardButton("🏠 В главное меню", callback_data="nav_home"),
+    )
+    return markup
+
+
+def reminders_list_keyboard(active: list[dict[str, Any]]) -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup()
+    for idx, r in enumerate(active[:10], 1):
+        dt = ensure_utc_dt(r["remind_at"])
+        local_str = format_dt(dt + timedelta(hours=3))
+        short_title = (r["title"] or "Напоминание")[:22]
+        markup.row(
+            types.InlineKeyboardButton(
+                f"{idx}. {short_title} · {local_str}",
+                callback_data=f"rem_open:{r['id']}",
+            ),
+            types.InlineKeyboardButton("🗑", callback_data=f"rem_del:{r['id']}"),
+        )
+    markup.row(types.InlineKeyboardButton("➕ Создать напоминание", callback_data="nav_create_rem"))
+    markup.row(types.InlineKeyboardButton("🏠 В главное меню", callback_data="nav_home"))
+    return markup
+
+
+def reminder_detail_keyboard(reminder_id: int) -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(types.InlineKeyboardButton("🕒 Перенести время", callback_data=f"reschedule:{reminder_id}"))
+    markup.add(
+        types.InlineKeyboardButton("✅ Выполнено", callback_data=f"rem_done:{reminder_id}"),
+        types.InlineKeyboardButton("🗑 Удалить", callback_data=f"rem_del:{reminder_id}"),
     )
     markup.add(
-        types.InlineKeyboardButton("⏳ 3 часа", callback_data="qrem:180"),
-        types.InlineKeyboardButton("📅 1 день", callback_data="qrem:1440"),
+        types.InlineKeyboardButton("⬅️ К списку", callback_data="nav_reminders"),
+        types.InlineKeyboardButton("🏠 В главное меню", callback_data="nav_home"),
+    )
+    return markup
+
+
+def state_cancel_keyboard(back_callback: str = "nav_reminders") -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("❌ Отмена", callback_data=f"state_cancel:{back_callback}"),
+        types.InlineKeyboardButton("🏠 В главное меню", callback_data="nav_home"),
     )
     return markup
 
 
 def reminder_action_keyboard(reminder_id: int) -> types.InlineKeyboardMarkup:
-    markup = types.InlineKeyboardMarkup(row_width=3)
-    markup.add(
-        types.InlineKeyboardButton("⏱ +15м", callback_data=f"snooze:15:{reminder_id}"),
-        types.InlineKeyboardButton("🕐 +1ч", callback_data=f"snooze:60:{reminder_id}"),
-        types.InlineKeyboardButton("📅 +1д", callback_data=f"snooze:1440:{reminder_id}"),
-    )
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(types.InlineKeyboardButton("🕒 Перенести время", callback_data=f"reschedule:{reminder_id}"))
     markup.add(
         types.InlineKeyboardButton("✅ Выполнено", callback_data=f"done:{reminder_id}"),
-        types.InlineKeyboardButton("❌ Отмена", callback_data=f"cancel:{reminder_id}"),
+        types.InlineKeyboardButton("🗑 Удалить", callback_data=f"cancel:{reminder_id}"),
     )
     return markup
 
 
-def notification_action_keyboard(notif_id: int, reminder_id: int) -> types.InlineKeyboardMarkup:
-    markup = types.InlineKeyboardMarkup(row_width=3)
-    markup.add(
-        types.InlineKeyboardButton("⏱ +15м", callback_data=f"snooze:15:{reminder_id}"),
-        types.InlineKeyboardButton("🕐 +1ч", callback_data=f"snooze:60:{reminder_id}"),
-        types.InlineKeyboardButton("📅 +1д", callback_data=f"snooze:1440:{reminder_id}"),
-    )
-    markup.add(types.InlineKeyboardButton("✅ Ознакомлен", callback_data=f"ack:{notif_id}:{reminder_id}"))
+def notification_action_keyboard(notif_id: int) -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton("✅ Прочитано", callback_data=f"ack:{notif_id}"))
     return markup
 
 
@@ -683,7 +740,8 @@ def ensure_utc_dt(value: Any) -> datetime:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
     if isinstance(value, str):
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        normalized = re.sub(r"(\.\d{6})\d+", r"\1", value.strip()).replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized)
     return datetime.now(timezone.utc)
 
 
@@ -711,14 +769,13 @@ def is_permanent_telegram_error(err: Exception) -> bool:
 def format_notification_message(icon: str, title: str, message: str) -> str:
     safe_title = esc(title[:200])
     header = f"{icon} <b>Уведомление TravelSplit:</b>\n\n<b>{safe_title}</b>"
-    footer = "\n\nВы можете отложить напоминание или отметить как прочитанное:"
     if not message:
-        return header + footer
-    max_body = max(0, 3900 - len(header) - len(footer))
+        return header
+    max_body = max(0, 3900 - len(header))
     safe_body = esc(message)
     if len(safe_body) > max_body:
         safe_body = safe_body[: max(0, max_body - 1)] + "…"
-    return f"{header}\n{safe_body}{footer}"
+    return f"{header}\n{safe_body}"
 
 
 async def send_telegram_with_retry(
@@ -757,6 +814,17 @@ async def safe_edit_message(
             logger.debug("edit_message_text ignored error in chat %s: %s", chat_id, redact_secrets(e))
 
 
+async def safe_delete_message(chat_id: int, message_id: int) -> None:
+    try:
+        await bot.delete_message(chat_id, message_id)
+    except Exception as e:
+        logger.debug("delete_message fallback in chat %s: %s", chat_id, redact_secrets(e))
+        try:
+            await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=None)
+        except Exception:
+            pass
+
+
 async def sync_notification_read(
     chat_id: int, notif_id: Optional[int], user_id_override: Optional[str] = None
 ) -> None:
@@ -777,6 +845,31 @@ async def sync_notification_read(
         session = await get_http()
         async with session.patch(
             f"{BACKEND_URL}/api/notifications/{notif_id}/read",
+            headers={"X-Demo-User-Id": user_id},
+            timeout=aiohttp.ClientTimeout(total=3),
+        ) as resp:
+            await resp.release()
+    except Exception:
+        pass
+
+
+async def sync_all_notifications_read(chat_id: int, user_id_override: Optional[str] = None) -> None:
+    user_id = (user_id_override or "").strip().lower()
+    if not is_valid_user_id(user_id):
+        binding = await get_binding(chat_id)
+        user_id = binding["user_id"] if binding else "anna"
+    if not is_valid_user_id(user_id):
+        user_id = "anna"
+
+    try:
+        await mark_all_notifications_read_in_db(user_id)
+    except Exception as e:
+        logger.warning("Failed marking all notifications read in PostgreSQL: %s", redact_secrets(e))
+
+    try:
+        session = await get_http()
+        async with session.patch(
+            f"{BACKEND_URL}/api/me/notifications/read-all",
             headers={"X-Demo-User-Id": user_id},
             timeout=aiohttp.ClientTimeout(total=3),
         ) as resp:
@@ -840,8 +933,51 @@ def parse_reminder_text(payload: str) -> tuple[str, int]:
     return payload.strip()[:255], 15
 
 
+_CUSTOM_DT_RE = re.compile(
+    r"^\s*(\d{1,2}):(\d{2})(?:\s+(\d{1,2})(?:[\s./-]+(\d{1,2})(?:[\s./-]+(\d{4}))?)?)?\s*$"
+)
+
+
+def parse_custom_datetime(text: str) -> Optional[datetime]:
+    """Parse 'HH:MM [DD [MM [YYYY]]]' (MSK) with defaults for today/current month/year."""
+    m = _CUSTOM_DT_RE.match(text or "")
+    if not m:
+        return None
+    hh = int(m.group(1))
+    mm = int(m.group(2))
+    now_msk = datetime.now(MSK_TZ)
+    day = int(m.group(3)) if m.group(3) is not None else now_msk.day
+    month = int(m.group(4)) if m.group(4) is not None else now_msk.month
+    year = int(m.group(5)) if m.group(5) is not None else now_msk.year
+    try:
+        local_dt = datetime(year, month, day, hh, mm, tzinfo=MSK_TZ)
+    except ValueError:
+        return None
+    utc_dt = local_dt.astimezone(timezone.utc)
+    if utc_dt <= datetime.now(timezone.utc):
+        return None
+    return utc_dt
+
+
+def parse_create_reminder_input(payload: str) -> tuple[str, datetime]:
+    """Parse '<text> <HH:MM [DD [MM [YYYY]]]>' or '<text> <15m|2h|1d>' into (title, remind_at_utc)."""
+    cleaned = (payload or "").strip()
+    m = re.search(
+        r"(\d{1,2}:\d{2}(?:\s+\d{1,2}(?:[\s./-]+\d{1,2}(?:[\s./-]+\d{4})?)?)?)\s*$",
+        cleaned,
+    )
+    if m:
+        custom_dt = parse_custom_datetime(m.group(1))
+        if custom_dt is not None:
+            title_part = cleaned[: m.start()].strip()
+            title_part = re.sub(r"\s+(?:в|на)\s*$", "", title_part, flags=re.IGNORECASE).strip()
+            return (title_part[:255] or "Напоминание"), custom_dt
+    title, minutes = parse_reminder_text(cleaned)
+    return title, datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+
 def format_dt(dt: datetime) -> str:
-    return dt.strftime("%d.%m %H:%M")
+    return dt.strftime("%d.%m.%Y %H:%M")
 
 
 async def deliver_notification_to_chats(
@@ -863,21 +999,18 @@ async def deliver_notification_to_chats(
     async def deliver_one(chat_id: int) -> None:
         nonlocal delivered_count
         try:
-            rem_id = await try_claim_notification_delivery(
-                chat_id, user_id, title, message, now_dt, notif_id
-            )
-            if rem_id is None:
+            claimed = await try_claim_notification_delivery(chat_id, now_dt, notif_id)
+            if not claimed:
                 return
 
             msg_text = format_notification_message(icon, title, message)
             ok, permanent = await send_telegram_with_retry(
-                chat_id, msg_text, notification_action_keyboard(notif_id or 0, rem_id)
+                chat_id, msg_text, notification_action_keyboard(notif_id or 0)
             )
             if ok:
                 delivered_count += 1
             elif not permanent:
-                # При временном сбое сети снимаем бронь, чтобы догон повторил доставку
-                await unclaim_notification_delivery(chat_id, notif_id, rem_id)
+                await unclaim_notification_delivery(chat_id, notif_id)
         except Exception as e:
             logger.error("Unexpected error delivering notification %s to chat %s: %s", notif_id, chat_id, redact_secrets(e))
 
@@ -958,9 +1091,118 @@ def schedule_catchup_sync() -> None:
     asyncio.create_task(_runner())
 
 
-@bot.message_handler(commands=["start"])
+async def send_or_edit_menu(
+    chat_id: int,
+    text: str,
+    reply_markup: types.InlineKeyboardMarkup,
+    edit_message_id: Optional[int] = None,
+) -> None:
+    if edit_message_id is not None:
+        await safe_edit_message(text, chat_id=chat_id, message_id=edit_message_id, reply_markup=reply_markup)
+    else:
+        await bot.send_message(chat_id, text, reply_markup=reply_markup)
+
+
+async def send_main_menu(chat_id: int, edit_message_id: Optional[int] = None) -> None:
+    pending_chat_actions.pop(chat_id, None)
+    binding = await get_binding(chat_id)
+    profile = esc(binding["user_id"]) if binding else "не выбран"
+    text = f"🏠 <b>Главное меню</b>\nПрофиль: <b>{profile}</b>"
+    await send_or_edit_menu(chat_id, text, main_menu_keyboard(), edit_message_id=edit_message_id)
+
+
+async def send_link_menu(chat_id: int, edit_message_id: Optional[int] = None) -> None:
+    pending_chat_actions.pop(chat_id, None)
+    binding = await get_binding(chat_id)
+    current = f"\nСейчас: <b>{esc(binding['user_id'])}</b>" if binding else ""
+    text = f"🔗 <b>Выбор профиля</b>{current}\nНажмите на нужный или напишите <code>/link имя</code>."
+    await send_or_edit_menu(
+        chat_id,
+        text,
+        await build_quick_link_keyboard(include_home=True),
+        edit_message_id=edit_message_id,
+    )
+
+
+async def send_notifications_menu(chat_id: int, edit_message_id: Optional[int] = None) -> None:
+    pending_chat_actions.pop(chat_id, None)
+    binding = await get_binding(chat_id)
+    user_id = binding["user_id"] if binding and is_valid_user_id(binding["user_id"]) else "anna"
+
+    items: list[dict[str, Any]] = []
+    try:
+        items = await get_unread_notifications_from_db(user_id)
+    except Exception as e:
+        logger.debug("Unread notifications DB error: %s", redact_secrets(e))
+
+    if not items:
+        try:
+            session = await get_http()
+            async with session.get(
+                f"{BACKEND_URL}/api/me/notifications",
+                headers={"X-Demo-User-Id": user_id},
+                timeout=aiohttp.ClientTimeout(total=4),
+            ) as resp:
+                if resp.status == 200:
+                    raw = await resp.json()
+                    items = [
+                        {
+                            "id": n.get("id"),
+                            "notification_type": n.get("type"),
+                            "title": n.get("title"),
+                            "message": n.get("message"),
+                            "delivered_at": n.get("deliveredAt"),
+                        }
+                        for n in raw
+                        if not n.get("read")
+                    ]
+        except Exception:
+            pass
+
+    if not items:
+        text = f"🔔 <b>Новые уведомления ({esc(user_id)})</b>\n\nНепрочитанных уведомлений нет."
+        await send_or_edit_menu(chat_id, text, back_to_menu_keyboard(), edit_message_id=edit_message_id)
+        return
+
+    text = f"🔔 <b>Новые уведомления ({esc(user_id)})</b>\n\n"
+    for n in items[:8]:
+        icon = NOTIFICATION_ICONS.get(str(n.get("notification_type") or ""), "🔔")
+        dt_str = ""
+        if n.get("delivered_at"):
+            try:
+                dt_str = f" · {format_dt(ensure_utc_dt(n['delivered_at']) + timedelta(hours=3))}"
+            except Exception:
+                pass
+        line = f"{icon} <b>{esc(n.get('title'))}</b>{dt_str}\n"
+        if n.get("message"):
+            line += f"{esc(n.get('message'))}\n"
+        line += "\n"
+        if len(text) + len(line) > 3600:
+            break
+        text += line
+
+    await send_or_edit_menu(
+        chat_id,
+        text.rstrip(),
+        notifications_menu_keyboard(items),
+        edit_message_id=edit_message_id,
+    )
+
+
+async def send_create_reminder_menu(chat_id: int, edit_message_id: Optional[int] = None) -> None:
+    pending_chat_actions[chat_id] = {"mode": "create_reminder"}
+    text = (
+        "➕ <b>Новое напоминание</b>\n\n"
+        "Формат: <code>текст время [день месяц год]</code>\n"
+        "<i>День, месяц и год писать не обязательно — подставятся текущие.</i>"
+    )
+    await send_or_edit_menu(chat_id, text, create_reminder_menu_keyboard(), edit_message_id=edit_message_id)
+
+
+@bot.message_handler(commands=["start", "menu"])
 async def cmd_start(message: types.Message) -> None:
     chat_id = message.chat.id
+    pending_chat_actions.pop(chat_id, None)
     username = message.from_user.username if message.from_user else None
 
     user_to_link = strip_command(message.text or "").lower()
@@ -968,15 +1210,14 @@ async def cmd_start(message: types.Message) -> None:
         if not is_valid_user_id(user_to_link):
             await bot.send_message(
                 chat_id,
-                "❌ Некорректное имя профиля. Используйте латинские буквы и цифры (например: <code>anna</code>).",
-                reply_markup=await build_quick_link_keyboard(),
+                "Имя профиля должно быть латиницей, например: <code>anna</code>.",
+                reply_markup=await build_quick_link_keyboard(include_home=True),
             )
             return
         await save_binding(chat_id, user_to_link, username)
         await bot.send_message(
             chat_id,
-            f"✅ Профиль <b>{esc(user_to_link)}</b> успешно привязан!\n"
-            f"Уведомления о ваших поездках и бронированиях будут приходить в этот чат.",
+            f"✅ Профиль <b>{esc(user_to_link)}</b> привязан.",
             reply_markup=main_menu_keyboard(),
         )
         schedule_catchup_sync()
@@ -984,30 +1225,19 @@ async def cmd_start(message: types.Message) -> None:
 
     binding = await get_binding(chat_id)
     if binding:
-        await bot.send_message(
-            chat_id,
-            f"👋 С возвращением! Вы авторизованы как <b>{esc(binding['user_id'])}</b>.\n\n"
-            f"Используйте кнопки меню или команды:\n"
-            f"• /trips — предстоящие поездки\n"
-            f"• /remind [текст] [время] — создать напоминание\n"
-            f"• /reminders — активные задачи\n"
-            f"• /help — подробная справка",
-            reply_markup=main_menu_keyboard(),
-        )
+        await send_main_menu(chat_id)
     else:
         await bot.send_message(
             chat_id,
-            "👋 <b>Добро пожаловать в TravelSplit Бот!</b>\n\n"
-            "Бот мгновенно присылает уведомления о поездках (вылеты, поезда, заселение в отель) "
-            "из общей базы данных, помогает ставить напоминания и откладывать их кнопками.\n\n"
-            "Выберите ваш профиль для привязки:",
-            reply_markup=await build_quick_link_keyboard(),
+            "Выберите профиль для входа:",
+            reply_markup=await build_quick_link_keyboard(include_home=True),
         )
 
 
 @bot.message_handler(commands=["link"])
 async def cmd_link(message: types.Message) -> None:
     chat_id = message.chat.id
+    pending_chat_actions.pop(chat_id, None)
     username = message.from_user.username if message.from_user else None
     user_to_link = strip_command(message.text or "").lower()
 
@@ -1015,32 +1245,29 @@ async def cmd_link(message: types.Message) -> None:
         if not is_valid_user_id(user_to_link):
             await bot.send_message(
                 chat_id,
-                "❌ Некорректное имя профиля. Выберите профиль кнопкой или введите латиницей (<code>/link anna</code>):",
-                reply_markup=await build_quick_link_keyboard(),
+                "Имя профиля должно быть латиницей, например: <code>/link anna</code>.",
+                reply_markup=await build_quick_link_keyboard(include_home=True),
             )
             return
         await save_binding(chat_id, user_to_link, username)
         await bot.send_message(
             chat_id,
-            f"✅ Профиль <b>{esc(user_to_link)}</b> успешно привязан к этому чату!\n"
-            f"Уведомления TravelSplit теперь будут приходить сюда.",
+            f"✅ Профиль <b>{esc(user_to_link)}</b> привязан.",
             reply_markup=main_menu_keyboard(),
         )
         schedule_catchup_sync()
     else:
-        await bot.send_message(
-            chat_id,
-            "Выберите профиль пользователя для привязки:",
-            reply_markup=await build_quick_link_keyboard(),
-        )
+        await send_link_menu(chat_id)
 
 
 @bot.message_handler(commands=["trips"])
 async def cmd_trips(message: types.Message) -> None:
+    pending_chat_actions.pop(message.chat.id, None)
     await send_trips_info(message.chat.id)
 
 
-async def send_trips_info(chat_id: int) -> None:
+async def send_trips_info(chat_id: int, edit_message_id: Optional[int] = None) -> None:
+    pending_chat_actions.pop(chat_id, None)
     binding = await get_binding(chat_id)
     user_id = binding["user_id"] if binding and is_valid_user_id(binding["user_id"]) else "anna"
 
@@ -1081,7 +1308,7 @@ async def send_trips_info(chat_id: int) -> None:
             },
         ]
 
-    text = f"🗺 <b>Предстоящие события для пользователя {esc(user_id)}:</b>\n\n"
+    text = f"🗺 <b>Поездки ({esc(user_id)}):</b>\n\n"
     for ev in events:
         t_raw = ev.get("eventTimeUtc")
         try:
@@ -1100,30 +1327,20 @@ async def send_trips_info(chat_id: int) -> None:
             break
         text += chunk
 
-    await bot.send_message(chat_id, text, reply_markup=main_menu_keyboard())
+    await send_or_edit_menu(chat_id, text.rstrip(), back_to_menu_keyboard(), edit_message_id=edit_message_id)
 
 
 @bot.message_handler(commands=["remind"])
 async def cmd_remind(message: types.Message) -> None:
     chat_id = message.chat.id
+    pending_chat_actions.pop(chat_id, None)
     payload = strip_command(message.text or "")
 
     if not payload:
-        await bot.send_message(
-            chat_id,
-            "📝 <b>Как создать напоминание:</b>\n\n"
-            "• <code>/remind Взять паспорт 15m</code> (через 15 минут)\n"
-            "• <code>/remind Собрать чемодан 2h</code> (через 2 часа)\n"
-            "• <code>/remind Оплатить жилье 1d</code> (через 1 день)\n"
-            "• <code>/remind Регистрация на рейс 18:30</code> (в указанное время)\n\n"
-            "Или выберите быстрый таймер:",
-            reply_markup=quick_reminder_keyboard(),
-        )
+        await send_create_reminder_menu(chat_id)
         return
 
-    title, minutes = parse_reminder_text(payload)
-    remind_at = datetime.now(timezone.utc) + timedelta(minutes=minutes)
-
+    title, remind_at = parse_create_reminder_input(payload)
     binding = await get_binding(chat_id)
     user_id = binding["user_id"] if binding else "anna"
 
@@ -1132,76 +1349,149 @@ async def cmd_remind(message: types.Message) -> None:
 
     await bot.send_message(
         chat_id,
-        f"✅ Напоминание создано!\n\n"
-        f"📌 <b>{esc(title)}</b>\n"
-        f"⏱ Напомнить через: <b>{minutes} мин</b> (в {local_time} МСК)",
-        reply_markup=reminder_action_keyboard(rem_id),
+        f"✅ Напоминание создано: <b>{esc(title)}</b>\n📅 {local_time} МСК",
+        reply_markup=reminder_detail_keyboard(rem_id),
     )
 
 
 @bot.message_handler(commands=["reminders", "list"])
 async def cmd_reminders(message: types.Message) -> None:
+    pending_chat_actions.pop(message.chat.id, None)
     await send_reminders_list(message.chat.id)
 
 
-async def send_reminders_list(chat_id: int) -> None:
+async def send_reminders_list(chat_id: int, edit_message_id: Optional[int] = None) -> None:
+    pending_chat_actions.pop(chat_id, None)
     active = await get_active_reminders(chat_id)
     if not active:
-        await bot.send_message(
+        text = "📋 <b>Напоминания</b>\n\nАктивных напоминаний нет."
+        await send_or_edit_menu(
             chat_id,
-            "📭 У вас нет активных напоминаний.\n\n"
-            "Создайте новое: <code>/remind Собрать чемодан 30m</code>",
-            reply_markup=main_menu_keyboard(),
+            text,
+            reminders_list_keyboard([]),
+            edit_message_id=edit_message_id,
         )
         return
 
-    text = "📋 <b>Ваши активные напоминания:</b>\n\n"
+    text = "📋 <b>Напоминания:</b>\n\n"
     for idx, r in enumerate(active, 1):
         dt = ensure_utc_dt(r["remind_at"])
         local_str = format_dt(dt + timedelta(hours=3))
         snoozed_info = f" (перенесено: {r['snooze_count']})" if r["snooze_count"] > 0 else ""
         line = f"{idx}. <b>{esc(r['title'])}</b> — {local_str} МСК{snoozed_info}\n"
-        if len(text) + len(line) > 3800:
+        if len(text) + len(line) > 3600:
             break
         text += line
 
-    text += f"\nУправление ближайшим: <b>{esc(active[0]['title'])}</b>"
-    await bot.send_message(chat_id, text, reply_markup=reminder_action_keyboard(active[0]["id"]))
+    text += "\nНажмите на напоминание, чтобы изменить, или 🗑 для удаления."
+    await send_or_edit_menu(
+        chat_id,
+        text,
+        reminders_list_keyboard(active),
+        edit_message_id=edit_message_id,
+    )
 
 
-@bot.message_handler(commands=["help"])
-async def cmd_help(message: types.Message) -> None:
-    await bot.send_message(
-        message.chat.id,
-        "ℹ️ <b>Команды TravelSplit Telegram-бота:</b>\n\n"
-        "• <code>/link [имя]</code> — привязать аккаунт (anna, maria, ivan, dmitry)\n"
-        "• <code>/trips</code> — предстоящие поездки и билеты\n"
-        "• <code>/remind [текст] [время]</code> — создать напоминание\n"
-        "  <i>Пример: /remind Взять билеты 15m</i>\n"
-        "  <i>Пример: /remind Завтрак 09:00</i>\n"
-        "• <code>/reminders</code> — список всех активных напоминаний\n"
-        "• <code>/help</code> — это сообщение\n\n"
-        "💡 <b>Умный перенос (Snooze):</b>\n"
-        "Под каждым сработавшим напоминанием есть кнопки <b>+15м</b>, <b>+1ч</b>, <b>+1д</b>. "
-        "Нажмите их, и бот перенесет напоминание на указанный срок.",
-        reply_markup=main_menu_keyboard(),
+async def send_reminder_detail(chat_id: int, rem_id: int, edit_message_id: Optional[int] = None) -> None:
+    rem = await get_reminder_by_id(rem_id)
+    if (
+        not rem
+        or rem["chat_id"] != chat_id
+        or rem.get("notification_id") is not None
+        or rem.get("status") not in ("PENDING", "SNOOZED", "DELIVERED")
+    ):
+        await send_reminders_list(chat_id, edit_message_id=edit_message_id)
+        return
+
+    dt = ensure_utc_dt(rem["remind_at"])
+    local_str = format_dt(dt + timedelta(hours=3))
+    snoozed_info = f"\nПеренесено раз: <b>{rem['snooze_count']}</b>" if rem["snooze_count"] > 0 else ""
+    text = f"📌 <b>{esc(rem['title'])}</b>\n📅 {local_str} МСК{snoozed_info}"
+    await send_or_edit_menu(
+        chat_id,
+        text,
+        reminder_detail_keyboard(rem_id),
+        edit_message_id=edit_message_id,
     )
 
 
 @bot.message_handler(func=lambda m: True)
 async def handle_any_text(message: types.Message) -> None:
+    chat_id = message.chat.id
     text = (message.text or "").strip()
     lower = text.lower()
+
+    action = pending_chat_actions.get(chat_id)
+    if action:
+        mode = action.get("mode")
+        if mode == "reschedule":
+            rem_id = int(action["reminder_id"])
+            rem = await get_reminder_by_id(rem_id)
+            if not rem or rem["chat_id"] != chat_id:
+                pending_chat_actions.pop(chat_id, None)
+                await bot.send_message(chat_id, "Напоминание не найдено.", reply_markup=main_menu_keyboard())
+                return
+
+            new_utc = parse_custom_datetime(text)
+            if new_utc is None:
+                await bot.send_message(
+                    chat_id,
+                    "Укажите будущее время: <code>время [день месяц год]</code>\n"
+                    "<i>День, месяц и год писать не обязательно — подставятся текущие.</i>",
+                    reply_markup=state_cancel_keyboard(f"rem_open:{rem_id}"),
+                )
+                return
+
+            await update_reminder_snooze(rem_id, new_utc)
+            pending_chat_actions.pop(chat_id, None)
+            alert_msg_id = action.get("alert_message_id")
+            if alert_msg_id:
+                await safe_delete_message(chat_id, int(alert_msg_id))
+
+            local_time = format_dt(new_utc + timedelta(hours=3))
+            await bot.send_message(
+                chat_id,
+                f"🕒 Перенесено: <b>{esc(rem['title'])}</b>\n📅 {local_time} МСК",
+                reply_markup=reminder_detail_keyboard(rem_id),
+            )
+            return
+
+        if mode == "create_reminder":
+            if not text:
+                await bot.send_message(
+                    chat_id,
+                    "Формат: <code>текст время [день месяц год]</code>\n"
+                    "<i>День, месяц и год писать не обязательно — подставятся текущие.</i>",
+                    reply_markup=state_cancel_keyboard("nav_reminders"),
+                )
+                return
+
+            title, remind_at = parse_create_reminder_input(text)
+            binding = await get_binding(chat_id)
+            user_id = binding["user_id"] if binding else "anna"
+            rem_id = await insert_reminder(chat_id, user_id, title, remind_at)
+            pending_chat_actions.pop(chat_id, None)
+
+            local_time = format_dt(remind_at + timedelta(hours=3))
+            await bot.send_message(
+                chat_id,
+                f"✅ Напоминание создано: <b>{esc(title)}</b>\n📅 {local_time} МСК",
+                reply_markup=reminder_detail_keyboard(rem_id),
+            )
+            return
+
     if lower in ("поездки", "трипы", "расписание"):
-        await send_trips_info(message.chat.id)
+        await send_trips_info(chat_id)
+    elif lower in ("уведомления",):
+        await send_notifications_menu(chat_id)
     elif lower in ("напоминания", "задачи", "список"):
-        await send_reminders_list(message.chat.id)
-    elif lower in ("привет", "старт", "start"):
-        await cmd_start(message)
+        await send_reminders_list(chat_id)
+    elif lower in ("меню", "главное меню", "привет", "старт", "start"):
+        await send_main_menu(chat_id)
     else:
         await bot.send_message(
-            message.chat.id,
-            "Команда не распознана. Отправьте /help для списка доступных команд.",
+            chat_id,
+            "Не понял команду. Выберите раздел в главном меню.",
             reply_markup=main_menu_keyboard(),
         )
 
@@ -1216,7 +1506,27 @@ async def handle_callback(call: types.CallbackQuery) -> None:
     chat_id = call.message.chat.id
     message_id = call.message.message_id
 
+    if data == "nav_home":
+        await bot.answer_callback_query(call.id)
+        await send_main_menu(chat_id, edit_message_id=message_id)
+        return
+
+    if data.startswith("state_cancel:"):
+        pending_chat_actions.pop(chat_id, None)
+        target = data.split(":", 1)[1]
+        await bot.answer_callback_query(call.id, "Отменено")
+        if target.startswith("rem_open:"):
+            try:
+                rem_id = int(target.split(":", 1)[1])
+                await send_reminder_detail(chat_id, rem_id, edit_message_id=message_id)
+                return
+            except ValueError:
+                pass
+        await send_reminders_list(chat_id, edit_message_id=message_id)
+        return
+
     if data.startswith("link:"):
+        pending_chat_actions.pop(chat_id, None)
         user_id = data.split(":", 1)[1].strip().lower()
         if not is_valid_user_id(user_id):
             await bot.answer_callback_query(call.id, "Некорректный профиль")
@@ -1236,81 +1546,85 @@ async def handle_callback(call: types.CallbackQuery) -> None:
 
     if data == "nav_trips":
         await bot.answer_callback_query(call.id)
-        await send_trips_info(chat_id)
+        await send_trips_info(chat_id, edit_message_id=message_id)
+        return
+
+    if data == "nav_notifications":
+        await bot.answer_callback_query(call.id)
+        await send_notifications_menu(chat_id, edit_message_id=message_id)
         return
 
     if data == "nav_reminders":
         await bot.answer_callback_query(call.id)
-        await send_reminders_list(chat_id)
+        await send_reminders_list(chat_id, edit_message_id=message_id)
+        return
+
+    if data == "nav_create_rem":
+        await bot.answer_callback_query(call.id)
+        await send_create_reminder_menu(chat_id, edit_message_id=message_id)
         return
 
     if data == "nav_link":
         await bot.answer_callback_query(call.id)
-        await bot.send_message(
-            chat_id,
-            "Выберите ваш профиль для привязки:",
-            reply_markup=await build_quick_link_keyboard(),
-        )
-        return
-
-    if data == "nav_help":
-        await bot.answer_callback_query(call.id)
-        await cmd_help(call.message)
+        await send_link_menu(chat_id, edit_message_id=message_id)
         return
 
     try:
-        if data.startswith("qrem:"):
-            parts = data.split(":", 2)
-            mins = min(MAX_REMINDER_MINUTES, max(1, int(parts[1])))
-            title = parts[2] if len(parts) > 2 else "Собрать вещи"
-            remind_at = datetime.now(timezone.utc) + timedelta(minutes=mins)
-            binding = await get_binding(chat_id)
-            user_id = binding["user_id"] if binding else "anna"
-            rem_id = await insert_reminder(chat_id, user_id, title, remind_at)
-            local_time = format_dt(remind_at + timedelta(hours=3))
-
-            await bot.answer_callback_query(call.id, f"Поставил на {mins}м")
-            await safe_edit_message(
-                f"✅ Напоминание создано!\n\n"
-                f"📌 <b>{esc(title)}</b>\n"
-                f"⏱ Напомнить через: <b>{mins} мин</b> (в {local_time} МСК)",
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=reminder_action_keyboard(rem_id),
-            )
+        if data.startswith("notif_read:"):
+            notif_id = int(data.split(":", 1)[1])
+            await sync_notification_read(chat_id, notif_id)
+            await bot.answer_callback_query(call.id, "Прочитано")
+            await send_notifications_menu(chat_id, edit_message_id=message_id)
             return
 
-        if data.startswith("snooze:"):
-            _, mins_str, rem_id_str = data.split(":", 2)
-            mins = min(MAX_REMINDER_MINUTES, max(1, int(mins_str)))
-            rem_id = int(rem_id_str)
+        if data == "notif_read_all":
+            await sync_all_notifications_read(chat_id)
+            await bot.answer_callback_query(call.id, "Все прочитаны")
+            await send_notifications_menu(chat_id, edit_message_id=message_id)
+            return
 
+        if data.startswith("rem_open:"):
+            rem_id = int(data.split(":", 1)[1])
+            await bot.answer_callback_query(call.id)
+            await send_reminder_detail(chat_id, rem_id, edit_message_id=message_id)
+            return
+
+        if data.startswith("rem_del:"):
+            rem_id = int(data.split(":", 1)[1])
             rem = await get_reminder_by_id(rem_id)
-            if not rem or rem["chat_id"] != chat_id:
+            if rem and rem["chat_id"] == chat_id and rem.get("notification_id") is None:
+                await mark_reminder_status(rem_id, "CANCELLED")
+            await bot.answer_callback_query(call.id, "Удалено")
+            await send_reminders_list(chat_id, edit_message_id=message_id)
+            return
+
+        if data.startswith("rem_done:"):
+            rem_id = int(data.split(":", 1)[1])
+            rem = await get_reminder_by_id(rem_id)
+            if rem and rem["chat_id"] == chat_id and rem.get("notification_id") is None:
+                await mark_reminder_status(rem_id, "COMPLETED")
+            await bot.answer_callback_query(call.id, "Выполнено")
+            await send_reminders_list(chat_id, edit_message_id=message_id)
+            return
+
+        if data.startswith("reschedule:"):
+            rem_id = int(data.split(":", 1)[1])
+            rem = await get_reminder_by_id(rem_id)
+            if not rem or rem["chat_id"] != chat_id or rem.get("notification_id") is not None:
                 await bot.answer_callback_query(call.id, "Напоминание не найдено")
                 return
-
-            new_remind_at = datetime.now(timezone.utc) + timedelta(minutes=mins)
-            await update_reminder_snooze(rem_id, new_remind_at)
-            local_time = format_dt(new_remind_at + timedelta(hours=3))
-
-            label = (
-                f"{mins} мин"
-                if mins < 60
-                else f"{mins // 60} ч"
-                if mins < 1440
-                else "1 день"
-                if mins == 1440
-                else f"{mins // 1440} дн."
-            )
-            await bot.answer_callback_query(call.id, f"Отложено на {label}")
-            await safe_edit_message(
-                f"⏳ Напоминание отложено на <b>{label}</b>\n\n"
-                f"📌 <b>{esc(rem['title'])}</b>\n"
-                f"📅 Новое время: <b>{local_time} МСК</b> (перенесено {rem['snooze_count'] + 1} раз)",
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=reminder_action_keyboard(rem_id),
+            pending_chat_actions[chat_id] = {
+                "mode": "reschedule",
+                "reminder_id": rem_id,
+                "alert_message_id": message_id,
+            }
+            await bot.answer_callback_query(call.id)
+            await bot.send_message(
+                chat_id,
+                f"🕒 <b>{esc(rem['title'])}</b>\n\n"
+                f"Формат: <code>время [день месяц год]</code>\n"
+                f"<i>День, месяц и год писать не обязательно — подставятся текущие.</i>",
+                reply_markup=state_cancel_keyboard(f"rem_open:{rem_id}"),
             )
             return
 
@@ -1319,15 +1633,8 @@ async def handle_callback(call: types.CallbackQuery) -> None:
             rem = await get_reminder_by_id(rem_id)
             if rem and rem["chat_id"] == chat_id:
                 await mark_reminder_status(rem_id, "COMPLETED")
-                if rem.get("notification_id"):
-                    await sync_notification_read(chat_id, int(rem["notification_id"]), rem.get("user_id"))
-            await bot.answer_callback_query(call.id, "Выполнено!")
-            await safe_edit_message(
-                "✅ <b>Напоминание выполнено и закрыто!</b>",
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=main_menu_keyboard(),
-            )
+            await bot.answer_callback_query(call.id, "Выполнено")
+            await safe_delete_message(chat_id, message_id)
             return
 
         if data.startswith("cancel:"):
@@ -1335,33 +1642,16 @@ async def handle_callback(call: types.CallbackQuery) -> None:
             rem = await get_reminder_by_id(rem_id)
             if rem and rem["chat_id"] == chat_id:
                 await mark_reminder_status(rem_id, "CANCELLED")
-            await bot.answer_callback_query(call.id, "Отменено")
-            await safe_edit_message(
-                "❌ <b>Напоминание отменено.</b>",
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=main_menu_keyboard(),
-            )
+            await bot.answer_callback_query(call.id, "Удалено")
+            await safe_delete_message(chat_id, message_id)
             return
 
         if data.startswith("ack:"):
-            parts = data.split(":")
-            notif_id = int(parts[1])
-            rem_id = int(parts[2])
-            rem = await get_reminder_by_id(rem_id)
-            if not rem or rem["chat_id"] != chat_id:
-                await bot.answer_callback_query(call.id, "Уведомление не найдено")
-                return
-            await mark_reminder_status(rem_id, "COMPLETED")
-            await sync_notification_read(chat_id, notif_id, rem.get("user_id"))
-
-            await bot.answer_callback_query(call.id, "Ознакомлен")
-            await safe_edit_message(
-                "✅ <b>Уведомление отмечено как прочитанное.</b>",
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=main_menu_keyboard(),
-            )
+            notif_id = int(data.split(":", 1)[1])
+            if notif_id > 0:
+                await sync_notification_read(chat_id, notif_id)
+            await bot.answer_callback_query(call.id, "Прочитано")
+            await safe_delete_message(chat_id, message_id)
             return
     except (ValueError, IndexError):
         await bot.answer_callback_query(call.id, "Некорректные данные кнопки")
@@ -1480,11 +1770,7 @@ async def deliver_due_reminder(r: dict[str, Any]) -> None:
     chat_id = int(r["chat_id"])
     rem_id = int(r["id"])
     snooze_text = f" (перенесено: {r['snooze_count']} раз)" if r["snooze_count"] > 0 else ""
-    msg_text = (
-        f"⏰ <b>Напоминание!</b>\n\n"
-        f"📌 <b>{esc(r['title'])}</b>{snooze_text}\n\n"
-        f"Вы можете отложить задачу кнопками ниже:"
-    )
+    msg_text = f"⏰ <b>Напоминание!</b>\n\n📌 <b>{esc(r['title'])}</b>{snooze_text}"
     ok, permanent = await send_telegram_with_retry(
         chat_id, msg_text, reminder_action_keyboard(rem_id)
     )
